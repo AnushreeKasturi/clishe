@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **A man page**: `man clishe` now works, with the commands, the session
+  words, the config file and where your data lives. It ships with the pip
+  package and the Arch package.
 - **`CLISHE_DEBUG=1`** shows Python error messages that Clishe normally
   hides, for tracking down a bug: `CLISHE_DEBUG=1 clishe`.
 - **Two new lessons:** `clishe practice git` (13 exercises: init, config,

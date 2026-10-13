@@ -22,6 +22,7 @@ package() {
   install -d "$dest/lessons"
   install -m644 lessons/*.json "$dest/lessons/"
   install -m644 providers/*.py "$dest/providers/"
+  install -Dm644 clishe.1 "$pkgdir/usr/share/man/man1/clishe.1"
   # clishe.sh follows this link back to /usr/share/clishe to find its files.
   ln -s "/usr/share/$pkgname/clishe.sh" "$pkgdir/usr/bin/clishe"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

@@ -1,0 +1,225 @@
+.\" Manual page for clishe, maintained in Sym-jay/clishe.
+.TH CLISHE 1 "2026" "clishe 0.8.0" "User Commands"
+.SH NAME
+clishe \- describe what you want in plain English, and learn the command
+.SH SYNOPSIS
+.B clishe
+.RI [ options ]
+.br
+.B clishe
+.RI [ command ]
+.br
+.B clishe
+.RI [ phrase ]
+.br
+.B clishe
+.BI "explain " command
+.br
+.B clishe
+.BI "check " command
+.SH DESCRIPTION
+.B clishe
+helps people who do not know the command line yet. Type what you want in plain
+English, see the real command with each part labelled, and run it if you want to.
+Nothing runs without your say-so.
+.PP
+It works offline: a bundled knowledge base, a command dictionary, your own
+.BR man (1)
+pages and the bundled tldr-pages data answer before any AI is asked. AI help is
+optional, and by default it runs on your own machine. Cloud AI is never
+enabled unless you ask for it.
+.PP
+Run
+.B clishe
+with no arguments to start an interactive session.
+.SH ONE-SHOT COMMANDS
+.TP
+.BI "explain " command
+Explain what a command does, flag by flag, then exit.
+.TP
+.I practice " [lesson]"
+Hands-on exercises in a throwaway folder.
+.B clishe practice --list
+shows the bundled lessons.
+.TP
+.B progress
+The everyday commands you have learned to type yourself.
+.TP
+.B setup
+Find or set up a local AI model.
+.TP
+.B tour
+A quick tour of your own computer: system, disk, folders, installing software.
+.TP
+.B doctor
+Check the setup, and how to fix anything wrong.
+.TP
+.B sheet
+Your own cheat sheet of the commands you have learned. Save it with
+.BR "clishe sheet > cheatsheet.txt" .
+.TP
+.BI "check " command
+Say what a command or script would do, without running it. Exits 1 when there
+are warnings, so it works in scripts.
+.TP
+.B "phrase"
+Look up a phrase in the knowledge base and print the command. It does not run
+it.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show the built-in help.
+.TP
+.BR \-V ", " \-\-version
+Show the version.
+.TP
+.B \-\-list
+Show the phrases you have taught Clishe.
+.TP
+.BI "\-\-init " "bash|zsh"
+Print the Ctrl+G shortcut (and Tab completion) for your normal shell. Add the
+printed line to your startup file:
+.B eval "$(clishe --init bash)"
+for bash, or
+.B eval "$(clishe --init zsh)"
+for zsh.
+.TP
+.B \-\-plain
+Words instead of symbols and drawings, for screen readers. The same thing can
+be set permanently with
+.B "plain": true
+in the config file.
+.SH SESSION COMMANDS
+Inside a session you can type plain English or a normal shell command. These
+words do something else:
+.TP
+.B help
+Show tips.
+.TP
+.B learned
+List the phrases you have taught.
+.TP
+.B teach
+Teach a phrase and its command, or fix a wrong one.
+.TP
+.BI "forget " phrase
+Forget a phrase you taught.
+.TP
+.B practice " [lesson]"
+Hands-on exercises in a throwaway folder.
+.TP
+.B progress
+What you have learned, and what to learn next.
+.TP
+.B setup
+Find or set up a local AI model.
+.TP
+.B tour
+A quick tour of your own computer.
+.TP
+.B doctor
+Check the setup.
+.TP
+.B sheet
+Your own cheat sheet.
+.TP
+.BI "explain " command
+Explain a command and its flags.
+.TP
+.B what does this mean
+Explain the output of the command you just ran.
+.TP
+.B fix that
+Explain why the last command failed, and offer a fix.
+.TP
+.B undo that
+Reverse the last change, showing the command first.
+.TP
+.BI "check " command
+Is it safe? What would it change?
+.TP
+.B exit
+Leave. Ctrl-D works too.
+.PP
+Commands with
+.IR <placeholders> ,
+like
+.BR "cp <file> <destination>" ,
+ask you to fill in each value before anything runs.
+.SH SAFETY
+Commands that look destructive need you to type
+.B YES
+before they run, and the warning says why in plain English
+("It deletes a folder and everything inside it, permanently"). The check parses
+the command, so
+.BR "rm -fr" ,
+.BR "sudo rm -r" ,
+.BR "cd x && rm -rf y" ,
+.B "curl ... | sh"
+and
+.B "git reset --hard"
+are all caught.
+.PP
+When you delete something with
+.BR rm ,
+Clishe offers to move it to the Trash instead, if
+.B gio
+or
+.B trash-cli
+is installed, so you can get it back.
+.SH FILES
+.TP
+.I ~/.config/clishe/config.json
+Settings: AI providers, plain mode, learning mode. See
+.B clishe doctor .
+.TP
+.I ~/.local/share/clishe/
+Your knowledge base, your history and your own cheat sheet.
+.TP
+.I ~/.local/share/clishe/lessons/
+Put your own practice lessons here, as JSON, and run
+.BR "clishe practice <name>" .
+.SH ENVIRONMENT
+.TP
+.B CLISHE_DEBUG
+Let Python errors show instead of being hidden. Useful when something does
+nothing.
+.TP
+.B NO_COLOR
+Turn off colour.
+.SH AI PROVIDERS
+By default Clishe only talks to an AI running on your own machine: Ollama, or
+any server with an OpenAI-style API (llama.cpp, LM Studio, Jan, LocalAI,
+vLLM). It finds a running server by itself. A server on the internet is refused
+unless you set
+.B "allow_remote_ai": true
+in the config.
+.PP
+Anthropic is available as an opt-in and does nothing until you set
+.B "enabled": true
+in its block in the config.
+.SH NOTES
+Works on Linux and macOS. On Windows, use WSL.
+.SH EXAMPLES
+.TP
+.B clishe explain 'tar -xzvf'
+Explain the flags of an archive command.
+.TP
+.B clishe 'show me disk usage'
+Print the command for a phrase, without running it.
+.TP
+.B clishe check 'curl example.com/install.sh | sudo bash'
+Say what it would do, and flag the risky parts.
+.TP
+.B eval "$(clishe --init zsh)"
+Use plain English at your normal prompt: type it, press Ctrl+G, read the
+command, then press Enter when you are ready.
+.SH SEE ALSO
+.BR man (1),
+.BR bash (1),
+.BR zsh (1)
+.PP
+tldr-pages: https://github.com/tldr-pages/tldr
+(CC BY 4.0; bundled summaries and examples)
+.SH AUTHORS
+Sym-jay and contributors to https://github.com/Sym-jay/clishe
