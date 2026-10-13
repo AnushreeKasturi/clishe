@@ -63,6 +63,19 @@ def test_version_matches_between_script_and_pyproject():
     assert script_version == project_version
 
 
+def _shell_help_block(name):
+    """The text of a `cat <<'EOF'` help function in clishe.sh, e.g. usage."""
+    script = (ROOT / "clishe.sh").read_text()
+    block = re.search(rf"^{name}\(\) \{{\n(.*?)^\}}", script, re.S | re.M)
+    assert block, f"no {name}() in clishe.sh"
+    return block.group(1)
+
+
+# A session keyword: lowercase words, optionally ending in <placeholder>
+# or [optional]. Anything else in the help text is prose, not a command.
+SESSION_KEYWORD = re.compile(r"^[a-z][a-z0-9 ]*(?:<[^>]+>|\[[a-z]+\])?$")
+
+
 def test_every_file_clishe_needs_is_packaged():
     """Anything the installed package must carry has to match a package-data
     glob and be installed by the PKGBUILD, or it silently doesn't ship
@@ -96,6 +109,34 @@ def test_the_aur_package_installs_what_pyproject_ships():
                    "./*.json", "./*.json.gz", "lessons/*.json", "providers/*.py"):
         assert needed in pkbuild, f"the PKGBUILD does not install {needed}"
     assert "/usr/share/man/man1/clishe.1" in pkbuild, "the man page is not installed"
+
+
+def test_every_one_shot_command_in_usage_is_in_the_readme():
+    """`clishe --help` and the README list the same commands. A new one-shot
+    command added to usage() but not the README is the usual drift."""
+    readme = (ROOT / "README.md").read_text()
+    commands = [m.group(1) for m in
+                (re.match(r"^  clishe (\S+)", line)
+                 for line in _shell_help_block("usage").splitlines()) if m]
+    assert commands, "no one-shot commands found in usage()"
+    missing = [c for c in commands if c.strip('"<>') not in readme]
+    assert not missing, f"README does not document: {missing}"
+
+
+def test_every_session_command_in_help_is_in_the_readme():
+    """Same for the session commands: session_help() and the README's
+    session commands table must not drift apart."""
+    readme = (ROOT / "README.md").read_text()
+    keywords = []
+    for line in _shell_help_block("session_help").splitlines():
+        # The description starts at two or more spaces, so keywords and
+        # descriptions are always separable (keep session_help padded).
+        match = re.match(r"^  (\S.*?)(?:  +|$)", line)
+        if match and SESSION_KEYWORD.match(match.group(1)):
+            keywords.append(match.group(1))
+    assert keywords, "no session commands found in session_help()"
+    missing = [k for k in keywords if f"`{k}`" not in readme]
+    assert not missing, f"README does not document: {missing}"
 
 
 def test_specific_error_patterns_come_before_generic_ones():

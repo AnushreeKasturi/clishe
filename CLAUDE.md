@@ -33,9 +33,9 @@ type it yourself. Published on PyPI as `clishe` (`pipx install clishe`).
 ## Quick start
 
 ```bash
-pip install pytest                                  # the only dev dependency
+pip install -e ".[dev]"                          # pytest, coverage, ruff
 HOME=$(mktemp -d) NO_COLOR=1 ./clishe.sh            # try it with a throwaway home
-python -m pytest tests/ -q && /bin/bash tests/test_shell_functions.sh
+python -m pytest tests/ -q && ruff check . && /bin/bash tests/test_shell_functions.sh
 ```
 
 ## Layout
@@ -87,8 +87,9 @@ PKGBUILD**, or it won't ship. A new Python subfolder also needs an entry in
    - [ ] README (features, session commands table, one-shot list)
    - [ ] tests for the Python logic and the bash rendering
 
-`tests/test_data_files.py` checks that every file the package needs is in
-`package-data` and in the PKGBUILD.
+`tests/test_data_files.py` checks that `usage` and `session_help` still match
+the README, and that every file the package needs is in `package-data` and the
+PKGBUILD.
 
 ## Debugging
 
@@ -126,14 +127,21 @@ Or set `CLISHE_DEBUG=1` to let those errors through in a real session:
 
 ```bash
 python -m pytest tests/ -q                 # Python (stdlib + pytest)
+ruff check .                                # lint (unused imports, undefined names)
+coverage run -m pytest tests/ -q && coverage report   # 81% now, floor is 75
 /bin/bash tests/test_shell_functions.sh    # bash, incl. end-to-end sessions
 zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
 ```
 
 - CI (`.github/workflows/tests.yml`) runs everything on **Linux (Python
-  3.9/3.11/3.12) and macOS**, plus `shellcheck -S warning`, `zsh -n`, and
-  an install-and-run check of the package (including that the data files and
+  3.9/3.11/3.12) and macOS**, plus `ruff check`, `coverage report`,
+  `shellcheck -S warning` on both systems, `zsh -n`, and an
+  install-and-run check of the package (including that the data files and
   the man page are actually installed).
+- Ruff is deliberately narrow (`E4,E7,E9,F`, `E402` ignored): it catches
+  breakage, not style. Don't widen it without reformatting the codebase -
+  the long lines, `typing.List` for Python 3.9 and the `sys.path` line
+  before the sibling imports are all intentional.
 - **Shellcheck isn't installed locally**: watch for SC2034 (variable looks
   unused; e.g. set for `eval` or another function) and SC2178/SC2128 (it
   doesn't track `local` per function, so reusing a name as array in one

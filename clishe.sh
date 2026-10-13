@@ -163,7 +163,7 @@ Type what you want in plain English ("show me disk usage"), or any normal
 shell command. Clishe shows you the command before it runs.
 
   explain <command>   what does a command do? (also: "what does ls do")
-  what does this mean explain the output of the command you just ran
+  what does this mean  explain the output of the command you just ran
   fix that            explain why the last command failed, and fix it
   undo that           reverse the last change (mv, cp, mkdir, touch, chmod, cd, Trash)
   check <command>     is it safe? what would it change? (also a script file)

@@ -237,7 +237,7 @@ def draw(command: str, width: int = 80, plain: bool = False) -> Optional[dict]:
         for n, label in enumerate(labels):
             branch = "└─ " if n == len(labels) - 1 else "├─ "
             lines.append((tree + branch, label))
-    widest = max([len(spaced)] + [len(t) + len(l) for t, l in lines])
+    widest = max([len(spaced)] + [len(tree) + len(label) for tree, label in lines])
     if widest > width:
         return None
     return {"command": spaced, "lines": lines}

@@ -2,7 +2,6 @@
 check. Every test points CONFIG_FILE at a temporary folder, so the real
 config is never read or written."""
 import json
-import os
 import stat
 import sys
 from pathlib import Path
