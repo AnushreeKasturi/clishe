@@ -117,7 +117,7 @@ Most command-line tools assume you already know the command you want. Clishe ass
 pipx install clishe
 ```
 
-Update with `pipx upgrade clishe`. (`uv tool install clishe` works too, and `pipx install git+https://github.com/Sym-jay/clishe` gets the latest unreleased code.)
+Update with `pipx upgrade clishe`. (`uv tool install clishe` works too, and `pipx install git+https://github.com/Sym-jay/clishe` gets the latest unreleased code.) There's also a man page: `man clishe`.
 
 ### With the install script
 
@@ -538,6 +538,7 @@ output_guides.json      offline "what does this mean?" guides
 error_patterns.json     offline error hints
 install.sh              one-line installer
 launch.py               the clishe command when installed with pipx
+clishe.1                the man page (man clishe)
 packaging/aur/          Arch User Repository package
 tests/                  pytest suite
 ```

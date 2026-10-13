@@ -1,5 +1,6 @@
 """Checks on the bundled data files and project metadata, so a bad edit to a
 JSON file or a forgotten version bump fails CI instead of a user's session."""
+import fnmatch
 import json
 import re
 import sys
@@ -60,6 +61,41 @@ def test_version_matches_between_script_and_pyproject():
     script_version = re.search(r'^CLISHE_VERSION="([^"]+)"', script, re.M).group(1)
     project_version = re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1)
     assert script_version == project_version
+
+
+def test_every_file_clishe_needs_is_packaged():
+    """Anything the installed package must carry has to match a package-data
+    glob and be installed by the PKGBUILD, or it silently doesn't ship
+    (CLAUDE.md, Layout). Docs and build files stay out of the package."""
+    # Everything a running Clishe reads has to ship: data (*.json), the
+    # bundled tldr-pages database, and the shell scripts and man page.
+    shippable = (".json", ".gz", ".sh", ".1")
+    # install.sh is the from-git installer: it clones the repo, so it is run
+    # from a checkout and is not part of the installed package.
+    known_exceptions = {"install.sh"}
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    globs = re.search(r"^clishe = \[(.*?)\]", pyproject, re.S | re.M).group(1)
+    patterns = [p.strip().strip('"') for p in globs.split(",")]
+
+    for path in sorted(ROOT.iterdir()):
+        if not path.is_file() or path.name.startswith("."):
+            continue
+        if not path.name.endswith(shippable) or path.name in known_exceptions:
+            continue
+        assert any(fnmatch.fnmatch(path.name, p) for p in patterns), (
+            f"{path.name} is not in package-data ({patterns}); add it there and "
+            f"to packaging/aur/PKGBUILD, or it won't ship")
+
+
+def test_the_aur_package_installs_what_pyproject_ships():
+    """The PKGBUILD keeps its own copy of the file list; it must not fall
+    behind the pip package."""
+    pkbuild = (ROOT / "packaging" / "aur" / "PKGBUILD").read_text()
+    # clishe-bind.* covers both shell bindings.
+    for needed in ("clishe.sh", "clishe-bind.*", "clishe.1",
+                   "./*.json", "./*.json.gz", "lessons/*.json", "providers/*.py"):
+        assert needed in pkbuild, f"the PKGBUILD does not install {needed}"
+    assert "/usr/share/man/man1/clishe.1" in pkbuild, "the man page is not installed"
 
 
 def test_specific_error_patterns_come_before_generic_ones():

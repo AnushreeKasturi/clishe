@@ -60,6 +60,7 @@ python -m pytest tests/ -q && /bin/bash tests/test_shell_functions.sh
 | `config.py`, `providers/` | Config, distro detection, AI providers (ollama, local, anthropic) |
 | `*.json` | Offline data: `seed_kb.json` (phrases), `command_dictionary.json`, `error_patterns.json`, `output_guides.json` |
 | `scripts/build_tldr.py` | Rebuilds `tldr.json.gz` from a pinned tldr-pages release. Never edit the .gz by hand |
+| `clishe.1` | The man page (`man clishe`) |
 | `packaging/aur/` | Arch package (not yet submitted to the AUR) |
 
 The installed package keeps this flat layout: `pyproject.toml` maps the repo
@@ -85,6 +86,9 @@ PKGBUILD**, or it won't ship. A new Python subfolder also needs an entry in
    - [ ] `usage` and `session_help`
    - [ ] README (features, session commands table, one-shot list)
    - [ ] tests for the Python logic and the bash rendering
+
+`tests/test_data_files.py` checks that every file the package needs is in
+`package-data` and in the PKGBUILD.
 
 ## Debugging
 
@@ -128,7 +132,8 @@ zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
 
 - CI (`.github/workflows/tests.yml`) runs everything on **Linux (Python
   3.9/3.11/3.12) and macOS**, plus `shellcheck -S warning`, `zsh -n`, and
-  an install-and-run check of the package.
+  an install-and-run check of the package (including that the data files and
+  the man page are actually installed).
 - **Shellcheck isn't installed locally**: watch for SC2034 (variable looks
   unused; e.g. set for `eval` or another function) and SC2178/SC2128 (it
   doesn't track `local` per function, so reusing a name as array in one

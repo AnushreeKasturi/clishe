@@ -53,6 +53,14 @@ jobs:
           clishe --version
           test "$(clishe 'show me disk usage')" = "df -h"
           clishe explain tar -xzvf | grep -q "extract"
+          # The Ctrl+G binding is what a packaging change breaks most often.
+          clishe --init bash | grep -q clishe-bind.bash
+          clishe --init zsh | grep -q clishe-bind.zsh
+          # The data files and the man page have to ship too.
+          python -c "import clishe, pathlib; p = pathlib.Path(list(clishe.__path__)[0]); \
+            [(_ for _ in ()).throw(AssertionError(f)) for f in ['clishe.1', 'clishe.sh', \
+            'seed_kb.json', 'tldr.json.gz', 'lessons/basics.json', 'providers/base.py'] \
+            if not (p / f).exists()]"
 
   # macOS ships bash 3.2 and BSD tools: run everything there too, so Clishe
   # keeps working for Mac users.
