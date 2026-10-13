@@ -76,15 +76,19 @@ PKGBUILD**, or it won't ship. A new Python subfolder also needs an entry in
 `python3 clishe_brain.py ... 2>/dev/null`) and parses `KEY=value` lines with
 `parse_brain_output` or a `while IFS='=' read` loop. To add a feature:
 1. Logic in a Python module.
-2. A new action in `clishe_brain.py` (add it to `choices=[...]` in `main()`,
-   the full list of actions; print `KEY=value`; use `_one_line()` /
-   `_encoded()` for values).
+2. A new action in `clishe_brain.py`: a `_action_<name>(brain, args)`
+   function that prints `KEY=value` (use `_one_line()` / `_encoded()` for
+   values), plus an entry for it in `ACTIONS`. The `--action` choices come
+   from that dict, so there is no second list to update.
 3. A bash function in `clishe.sh` that renders it.
 4. Hook it in, and don't skip the text (the step most often missed):
    - [ ] the one-shot `case "$1"` block and/or the session `case "$user_input"` block
    - [ ] `usage` and `session_help`
    - [ ] README (features, session commands table, one-shot list)
    - [ ] tests for the Python logic and the bash rendering
+
+`tests/test_clishe_brain.py` checks that every `--action` clishe.sh uses is
+registered.
 
 ## Debugging
 

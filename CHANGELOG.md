@@ -47,6 +47,11 @@
   `eval "$(clishe --init bash)"` line as Ctrl+G: `clishe <Tab>` lists what
   Clishe can do, `clishe practice <Tab>` the lessons, `clishe explain <Tab>`
   your commands, `clishe check <Tab>` your files.
+- Adding a backend action is now a single step: each action is a
+  `_action_<name>` function registered in `ACTIONS` in `clishe_brain.py`, and
+  the `--action` choices are read from there. The old hand-kept list of action
+  names (which had to be updated in two places) is gone. What each action
+  prints is unchanged.
 
 ### Fixed
 - Closing the terminal in the instant `practice` was starting could leave

@@ -608,3 +608,22 @@ def test_cheat_sheet(brain):
 
 def test_cheat_sheet_starts_empty(brain):
     assert brain.cheat_sheet() == {"learned": [], "asked": []}
+
+
+# ---------- the action registry ----------
+
+def test_every_action_the_shell_uses_is_registered():
+    """clishe.sh calls the backend as `--action <name>`; a typo there would
+    fail at runtime, in one session, with the Python error hidden."""
+    import re
+    import clishe_brain
+    shell = (Path(__file__).resolve().parent.parent / "clishe.sh").read_text()
+    for name in set(re.findall(r"--action ([a-z-]+)", shell)):
+        assert name in clishe_brain.ACTIONS, f"clishe.sh uses unknown action '{name}'"
+
+
+def test_every_registered_action_has_a_handler():
+    import clishe_brain
+    for name, handler in clishe_brain.ACTIONS.items():
+        assert callable(handler), name
+        assert handler.__name__ == f"_action_{name.replace('-', '_')}"
