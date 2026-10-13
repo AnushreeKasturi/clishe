@@ -22,10 +22,21 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dev dependencies
-        run: pip install pytest
+        run: pip install -e ".[dev]"
 
       - name: Run tests
         run: python -m pytest tests/ -v
+
+      - name: Lint the Python
+        run: ruff check .
+
+      # Coverage only needs one Python: it measures which lines the tests
+      # reach, not which interpreter they run on.
+      - name: Check test coverage
+        if: matrix.python-version == '3.12'
+        run: |
+          coverage run -m pytest tests/ -q
+          coverage report
 
       - name: Install zsh
         run: sudo apt-get install -y zsh
@@ -74,10 +85,21 @@ jobs:
           python-version: "3.12"
 
       - name: Install dev dependencies
-        run: pip install pytest
+        run: pip install -e ".[dev]"
 
       - name: Run tests
         run: python -m pytest tests/ -v
+
+      - name: Lint the Python
+        run: ruff check .
+
+      - name: Check the shell scripts
+        run: |
+          zsh -n clishe-bind.zsh
+          bash -n clishe.sh install.sh clishe-bind.bash
+          brew install shellcheck
+          shellcheck -S warning clishe.sh clishe-bind.bash install.sh \
+            tests/test_shell_functions.sh
 
       - name: Run shell-level regression tests with the system bash (3.2)
         run: /bin/bash tests/test_shell_functions.sh

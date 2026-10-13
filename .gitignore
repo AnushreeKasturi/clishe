@@ -19,4 +19,6 @@ dist/
 .idea/
 .DS_Store
 venv/
-venv/
+.venv/
+.coverage
+htmlcov/

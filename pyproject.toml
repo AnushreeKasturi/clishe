@@ -36,7 +36,8 @@ Homepage = "https://github.com/Sym-jay/clishe"
 Issues = "https://github.com/Sym-jay/clishe/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+# Development only: Clishe itself has no runtime dependencies (see above).
+dev = ["pytest>=7.0", "coverage>=7.0", "ruff>=0.5"]
 
 # The repo is a flat folder of scripts that find each other by location
 # (clishe.sh runs clishe_brain.py next to it, which imports config.py and
@@ -48,3 +49,31 @@ packages = ["clishe", "clishe.providers"]
 
 [tool.setuptools.package-data]
 clishe = ["clishe.sh", "clishe-bind.bash", "clishe-bind.zsh", "clishe.1", "*.json", "*.json.gz", "lessons/*.json"]
+
+# Ruff: the checks that catch real breakage (undefined names, unused imports,
+# bad syntax). Deliberately not the whole rule set - the codebase keeps its own
+# house style (long lines, typing.List for Python 3.9, imports after the
+# sys.path line in tests), and reformatting all of it is not the point.
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# Every module (and test) puts the repo on sys.path before importing its
+# siblings, because the package is a flat folder of scripts (see above).
+ignore = ["E402"]
+
+# Coverage: a floor, so new code doesn't quietly arrive untested. Currently
+# 81%; the gap is mostly clishe_brain.py's action dispatch, which is
+# exercised through clishe.sh rather than called directly.
+[tool.coverage.run]
+source = ["."]
+branch = true
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 75

@@ -40,7 +40,8 @@ def parse_json_reply(text: str) -> dict:
     except json.JSONDecodeError:
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end <= start:
-            raise ProviderError(f"No JSON object in model reply: {cleaned[:80]!r}")
+            raise ProviderError(
+                f"No JSON object in model reply: {cleaned[:80]!r}") from None
         try:
             data = json.loads(cleaned[start:end + 1])
         except json.JSONDecodeError as e:

@@ -167,8 +167,9 @@ on everyday commands teaches people to type `YES` without reading.
 ## Running tests locally
 
 ```bash
-pip install pytest
+pip install -e ".[dev]"          # pytest, coverage, ruff - none of these ship
 python -m pytest tests/ -v
+ruff check .                     # unused imports, undefined names
 bash tests/test_shell_functions.sh
 shellcheck -S warning clishe.sh install.sh   # if you have shellcheck
 ```
@@ -181,7 +182,8 @@ a few end-to-end sessions with piped input.
 
 - Keep PRs focused — one change per PR is easier to review than several
   bundled together.
-- Make sure `python -m pytest tests/ -v` passes before opening the PR.
+- Make sure `python -m pytest tests/ -v` and `ruff check .` pass before
+  opening the PR. CI runs the same on Linux and macOS.
 - Describe *why* the change is needed, not just what it does.
 
 ## Reporting bugs or safety issues

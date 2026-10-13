@@ -1,6 +1,5 @@
 """Tests for doctor.py - `clishe doctor`. Nothing is changed by doctor;
 the AI checks are faked so no server is contacted."""
-import json
 import os
 import sys
 from pathlib import Path
