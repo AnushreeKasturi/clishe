@@ -840,17 +840,401 @@ def _encoded(value: str) -> str:
     return str(value).replace("\r", "").replace("\n", "\\n")
 
 
+# Each action the backend understands: a function that prints the KEY=value
+# lines clishe.sh parses. Adding an action means writing the function and
+# adding it to ACTIONS - argparse reads the choices from there, so there
+# is no second list to keep in step.
+def _action_query(brain, args):
+    print(brain.query(args.phrase))
+
+
+def _action_suggest(brain, args):
+    match = brain.suggest(args.phrase)
+    source = ""
+    if not match:
+        match = brain.suggest_example(args.phrase)
+        source = "tldr-pages"
+    if match:
+        print("STATUS=ok")
+        print(f"PHRASE={_one_line(match[0])}")
+        print(f"COMMAND={_one_line(match[1])}")
+        if source:
+            print(f"PROVIDER={source}")
+    else:
+        print("STATUS=none")
+
+
+def _action_learn(brain, args):
+    ok = brain.learn(args.phrase, args.command)
+    print('learned' if ok else 'error')
+
+
+def _action_forget(brain, args):
+    print('forgotten' if brain.forget(args.phrase) else 'unknown')
+
+
+def _action_list(brain, args):
+    for phrase, command in brain.learned():
+        print(f"{phrase}\t{command}")
+
+
+def _action_log(brain, args):
+    ok = brain.log(args.command)
+    print('logged' if ok else 'error')
+    for tip in brain.record_use(args.command, args.phrase):
+        print(f"TIP={_one_line(tip)}")
+    if brain.should_hint_guide(args.command):
+        print("GUIDE=1")
+    prediction = brain.predict(args.command)
+    if prediction:
+        print(f"PREDICT={_one_line(prediction)}")
+
+
+def _action_output(brain, args):
+    result = brain.explain_output(args.command)
+    print(f"STATUS={result['status']}")
+    if result['status'] == 'ok':
+        print(f"EXPLANATION={_encoded(result['explanation'])}")
+
+
+def _action_line(brain, args):
+    result = brain.resolve_line(args.phrase, use_ai=not args.no_ai)
+    print(f"MODE={result['mode']}")
+    for key in ('command', 'provider'):
+        if result.get(key):
+            print(f"{key.upper()}={_one_line(result[key])}")
+    for key in ('note', 'explanation'):
+        if result.get(key):
+            print(f"{key.upper()}={_encoded(result[key])}")
+    if result.get('reasons'):
+        print(f"REASON={_encoded(chr(10).join(result['reasons']))}")
+
+
+def _action_missing(brain, args):
+    hint = brain.missing_program(args.command)
+    print("STATUS=ok" if hint else "STATUS=none")
+    if hint:
+        print(f"HINT={_one_line(hint)}")
+
+
+def _action_trash(brain, args):
+    result = brain.trash_command(args.command)
+    if result:
+        print("STATUS=ok")
+        print(f"COMMAND={_one_line(result['command'])}")
+        print(f"RESTORE={_one_line(result['restore'])}")
+        print(f"MODE={result['mode']}")
+    else:
+        print("STATUS=none")
+
+
+def _action_turn(brain, args):
+    command = brain.your_turn(args.phrase)
+    print("STATUS=ask" if command else "STATUS=no")
+    if command:
+        print(f"COMMAND={_one_line(command)}")
+
+
+def _action_attempt(brain, args):
+    result = brain.attempt(args.phrase, args.command)
+    print(f"STATUS={result['status']}")
+    print(f"COMMAND={_one_line(result['command'])}")
+
+
+def _action_progress(brain, args):
+    result = brain.progress()
+    print(f"LEARNED={' '.join(result['learned'])}")
+    print(f"TOTAL={result['total']}")
+    print(f"OTHERS={' '.join(result['others'])}")
+    print(f"TO_TRY={' '.join(result['to_try'])}")
+    print(f"NEXT={' '.join(result['next'])}")
+
+
+def _action_setup(brain, args):
+    import setup_check
+    result = setup_check.check()
+    for line in setup_check.report(result):
+        print(f"LINE={line}")
+    print(f"MODEL={result['model']}")
+    print(f"RUNNING={int(result['ollama_running'])}")
+    print(f"READY={int(result['model_ready'])}")
+    print(f"CONFIGURED={result['configured_model']}")
+
+
+def _action_set_model(brain, args):
+    import setup_check
+    print('saved' if setup_check.set_ollama_model(args.command) else 'error')
+
+
+def _action_breakdown(brain, args):
+    # With a phrase: only the first time it's used, so known phrases
+    # don't redraw the same picture every time.
+    key = normalize_phrase(args.phrase)
+    if key and brain.data.get('phrase_uses', {}).get(key, 0) > 0:
+        print("STATUS=skip")
+    else:
+        from breakdown import draw
+        result = draw(args.command, width=args.width,
+                      plain=bool(os.environ.get("CLISHE_PLAIN")))
+        print("STATUS=ok" if result else "STATUS=none")
+        if result:
+            print(f"CMD={_one_line(result['command'])}")
+            for tree, label in result['lines']:
+                print(f"LINE={tree}\t{_one_line(label)}")
+
+
+def _action_tour(brain, args):
+    from tour import tour
+    for stop in tour():
+        print(f"STOP={_one_line(stop['title'])}")
+        for label, value in stop['facts']:
+            print(f"FACT={_one_line(label)}\t{_one_line(value)}")
+        import textwrap
+        for line in textwrap.wrap(stop['note'], width=max(40, args.width - 2)):
+            print(f"NOTE={line}")
+        if stop['try']:
+            print(f"TRY={_one_line('   '.join(stop['try']))}")
+
+
+def _action_fix(brain, args):
+    result = brain.fix(args.command, args.error)
+    print(f"STATUS={result['status']}")
+    if result['status'] == 'ok':
+        print(f"EXPLANATION={_encoded(result['explanation'])}")
+        print(f"PROVIDER={result['provider']}")
+        if result['command']:
+            print(f"COMMAND={_one_line(result['command'])}")
+        if result['unverified']:
+            print(f"UNVERIFIED={_one_line(', '.join(result['unverified']))}")
+
+
+def _action_inspect(brain, args):
+    # "Is this safe to run?" for a command, or for a script file.
+    import check
+    text = check.read_script(os.path.expanduser(args.command.strip())) \
+        if args.command.strip() and " " not in args.command.strip() else None
+    if text is not None:
+        result = check.check_script(text)
+        print("MODE=script")
+        print(f"LINES={len(result['results'])}")
+        for effect in result['effects']:
+            print(f"EFFECT={_one_line(effect)}")
+        for risky in result['risky'][:20]:
+            print(f"RLINE={_one_line(risky['command'])}")
+            for warning in risky['warnings']:
+                print(f"WARN={_one_line(warning)}")
+    else:
+        result = check.inspect(args.command)
+        print("MODE=command")
+        for effect in result['effects']:
+            print(f"EFFECT={_one_line(effect)}")
+        for warning in result['warnings']:
+            print(f"WARN={_one_line(warning)}")
+        for step in result['safer']:
+            print(f"SAFER={_one_line(step)}")
+
+
+def _action_undo_before(brain, args):
+    import undo
+    note = undo.before(args.command, args.cwd or os.getcwd())
+    if note:
+        print(json.dumps(note))
+
+
+def _action_undo_record(brain, args):
+    import undo
+    try:
+        note = json.loads(args.state)
+    except ValueError:
+        note = None
+    record = undo.after(note, args.cwd or os.getcwd()) if isinstance(note, dict) else None
+    if record:
+        undo.save(UNDO_FILE, undo.load(UNDO_FILE) + [record])
+
+
+def _action_undo_plan(brain, args):
+    import undo
+    records = undo.load(UNDO_FILE)
+    if not records:
+        print("STATUS=none")
+    else:
+        result = undo.plan(records[-1])
+        print(f"STATUS={result['status']}")
+        print(f"ORIGINAL={_one_line(records[-1]['command'])}")
+        print(f"EXPLANATION={_one_line(result['explanation'])}")
+        for command in result.get('commands', []):
+            print(f"COMMAND={_one_line(command)}")
+
+
+def _action_undo_done(brain, args):
+    import undo
+    undo.save(UNDO_FILE, undo.load(UNDO_FILE)[:-1])
+
+
+def _action_lessons(brain, args):
+    import lessons
+    for pack in lessons.available():
+        needs = f" (needs {', '.join(pack['missing'])})" if pack['missing'] else ""
+        print(f"PACK={pack['name']}\t{pack['count']}\t{_one_line(pack['title'])}"
+              f"\t{_one_line(pack['description'])}{needs}")
+
+
+def _action_lesson(brain, args):
+    import lessons
+    pack = lessons.read(args.phrase)
+    absent = lessons.missing(pack) if pack else []
+    print("STATUS=" + ("none" if not pack else "missing" if absent else "ok"))
+    for name in absent:
+        from knowledge import missing_program_hint
+        print(f"MISSING={_one_line(missing_program_hint(name))}")
+    if pack and not absent:
+        print(f"TITLE={_one_line(pack['title'])}")
+        print(f"DONE={_one_line(pack.get('done', ''))}")
+        for ex in pack['exercises']:
+            print(f"TASK={_one_line(ex['task'])}")
+            print(f"HINT={_one_line(ex['hint'])}")
+            print(f"ANSWER={_one_line(ex['answer'])}")
+
+
+def _action_lesson_check(brain, args):
+    import lessons
+    pack = lessons.read(args.phrase)
+    ok = bool(pack) and 0 <= args.step < len(pack['exercises']) and lessons.passes(
+        pack['exercises'][args.step]['check'], args.command, args.cwd or os.getcwd(), args.state)
+    print("yes" if ok else "no")
+
+
+def _action_app(brain, args):
+    # "how do I install spotify?"
+    import apps
+    from config import detect_distro_family
+    name = apps.wanted(args.phrase)
+    app = apps.find(name) if name else None
+    family = detect_distro_family()
+    result = apps.plan(app, family) if app else (apps.tool_plan(name, family) if name else None)
+    if not result:
+        print("STATUS=none")
+    elif result.get("installed"):
+        print("STATUS=installed")
+        print(f"APP={_one_line(result['app'])}")
+    else:
+        print("STATUS=ok")
+        print(f"APP={_one_line(result['app'])}")
+        print(f"HOW={_one_line(result['how'])}")
+        if result['command']:
+            print(f"COMMAND={_one_line(result['command'])}")
+        for step in result['setup']:
+            print(f"SETUP={_one_line(step)}")
+        for other in result['others']:
+            print(f"OTHER={_one_line(other)}")
+
+
+def _action_doctor(brain, args):
+    import doctor
+    for check in doctor.run(os.environ.get("CLISHE_BASH", ""), os.environ.get("CLISHE_ON_PATH", ""),
+                            os.environ.get("SHELL", "")):
+        print("CHECK=" + "\t".join(_one_line(part) for part in check))
+
+
+def _action_sheet(brain, args):
+    sheet = brain.cheat_sheet()
+    for command, meaning in sheet['learned']:
+        print(f"LEARNED={_one_line(command)}\t{_one_line(meaning)}")
+    for phrase, command in sheet['asked']:
+        print(f"ASKED={_one_line(phrase)}\t{_one_line(command)}")
+
+
+def _action_setting(brain, args):
+    value = load_config().get(args.phrase, "")
+    print(str(value).lower() if isinstance(value, bool) else value)
+
+
+def _action_predict(brain, args):
+    print(brain.predict(args.command))
+
+
+def _action_resolve(brain, args):
+    # Line-based KEY=value output so clishe.sh can parse it with plain
+    # bash, no JSON tool required.
+    result = brain.resolve(args.phrase)
+    print(f"STATUS={result['status']}")
+    if result['status'] == 'ok':
+        print(f"COMMAND={_one_line(result['command'])}")
+        print(f"EXPLANATION={_encoded(result['explanation'])}")
+        print(f"PROVIDER={result['provider']}")
+        if result.get('manual'):
+            print(f"MANUAL={_encoded(chr(10).join(result['manual']))}")
+        if result.get('unverified'):
+            print(f"UNVERIFIED={_one_line(', '.join(result['unverified']))}")
+    elif result['status'] == 'declined':
+        print(f"PROVIDER={result['provider']}")
+
+
+def _action_explain(brain, args):
+    result = brain.explain(args.command)
+    print(f"STATUS={result['status']}")
+    if result['status'] == 'ok':
+        print(f"EXPLANATION={_encoded(result['explanation'])}")
+        print(f"PROVIDER={result['provider']}")
+
+
+def _action_diagnose(brain, args):
+    result = brain.diagnose(args.error)
+    print(f"STATUS={result['status']}")
+    if result['status'] == 'ok':
+        print(f"HINT={_one_line(result['hint'])}")
+
+
+def _action_check(brain, args):
+    result = brain.check(args.command)
+    print(f"STATUS={result['status']}")
+    if result['reasons']:
+        print(f"REASON={_encoded(chr(10).join(result['reasons']))}")
+
+
+ACTIONS = {
+    'query': _action_query,
+    'suggest': _action_suggest,
+    'learn': _action_learn,
+    'forget': _action_forget,
+    'list': _action_list,
+    'log': _action_log,
+    'output': _action_output,
+    'line': _action_line,
+    'missing': _action_missing,
+    'trash': _action_trash,
+    'turn': _action_turn,
+    'attempt': _action_attempt,
+    'progress': _action_progress,
+    'setup': _action_setup,
+    'set-model': _action_set_model,
+    'breakdown': _action_breakdown,
+    'tour': _action_tour,
+    'fix': _action_fix,
+    'inspect': _action_inspect,
+    'undo-before': _action_undo_before,
+    'undo-record': _action_undo_record,
+    'undo-plan': _action_undo_plan,
+    'undo-done': _action_undo_done,
+    'lessons': _action_lessons,
+    'lesson': _action_lesson,
+    'lesson-check': _action_lesson_check,
+    'app': _action_app,
+    'doctor': _action_doctor,
+    'sheet': _action_sheet,
+    'setting': _action_setting,
+    'predict': _action_predict,
+    'resolve': _action_resolve,
+    'explain': _action_explain,
+    'diagnose': _action_diagnose,
+    'check': _action_check,
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description='Clishe Brain - Command Backend')
     parser.add_argument('--action', required=True,
-                        choices=['query', 'suggest', 'learn', 'forget', 'list', 'log',
-                                 'predict', 'resolve', 'explain', 'diagnose', 'check',
-                                 'line', 'trash', 'missing', 'output',
-                                 'turn', 'attempt', 'progress',
-                                 'setup', 'set-model', 'breakdown', 'tour', 'fix',
-                                 'inspect', 'undo-before', 'undo-record', 'undo-plan',
-                                 'undo-done', 'lessons', 'lesson', 'lesson-check', 'app',
-                                 'setting', 'doctor', 'sheet'],
+                        choices=sorted(ACTIONS),
                         help='Action to perform')
     parser.add_argument('--phrase', default='', help='Natural language phrase')
     parser.add_argument('--command', default='', help='Bash command')
@@ -864,319 +1248,7 @@ def main():
 
     args = parser.parse_args()
     brain = ClisheBrain()
-
-    if args.action == 'query':
-        print(brain.query(args.phrase))
-
-    elif args.action == 'suggest':
-        match = brain.suggest(args.phrase)
-        source = ""
-        if not match:
-            match = brain.suggest_example(args.phrase)
-            source = "tldr-pages"
-        if match:
-            print("STATUS=ok")
-            print(f"PHRASE={_one_line(match[0])}")
-            print(f"COMMAND={_one_line(match[1])}")
-            if source:
-                print(f"PROVIDER={source}")
-        else:
-            print("STATUS=none")
-
-    elif args.action == 'learn':
-        ok = brain.learn(args.phrase, args.command)
-        print('learned' if ok else 'error')
-
-    elif args.action == 'forget':
-        print('forgotten' if brain.forget(args.phrase) else 'unknown')
-
-    elif args.action == 'list':
-        for phrase, command in brain.learned():
-            print(f"{phrase}\t{command}")
-
-    elif args.action == 'log':
-        ok = brain.log(args.command)
-        print('logged' if ok else 'error')
-        for tip in brain.record_use(args.command, args.phrase):
-            print(f"TIP={_one_line(tip)}")
-        if brain.should_hint_guide(args.command):
-            print("GUIDE=1")
-        prediction = brain.predict(args.command)
-        if prediction:
-            print(f"PREDICT={_one_line(prediction)}")
-
-    elif args.action == 'output':
-        result = brain.explain_output(args.command)
-        print(f"STATUS={result['status']}")
-        if result['status'] == 'ok':
-            print(f"EXPLANATION={_encoded(result['explanation'])}")
-
-    elif args.action == 'line':
-        result = brain.resolve_line(args.phrase, use_ai=not args.no_ai)
-        print(f"MODE={result['mode']}")
-        for key in ('command', 'provider'):
-            if result.get(key):
-                print(f"{key.upper()}={_one_line(result[key])}")
-        for key in ('note', 'explanation'):
-            if result.get(key):
-                print(f"{key.upper()}={_encoded(result[key])}")
-        if result.get('reasons'):
-            print(f"REASON={_encoded(chr(10).join(result['reasons']))}")
-
-    elif args.action == 'missing':
-        hint = brain.missing_program(args.command)
-        print("STATUS=ok" if hint else "STATUS=none")
-        if hint:
-            print(f"HINT={_one_line(hint)}")
-
-    elif args.action == 'trash':
-        result = brain.trash_command(args.command)
-        if result:
-            print("STATUS=ok")
-            print(f"COMMAND={_one_line(result['command'])}")
-            print(f"RESTORE={_one_line(result['restore'])}")
-            print(f"MODE={result['mode']}")
-        else:
-            print("STATUS=none")
-
-    elif args.action == 'turn':
-        command = brain.your_turn(args.phrase)
-        print("STATUS=ask" if command else "STATUS=no")
-        if command:
-            print(f"COMMAND={_one_line(command)}")
-
-    elif args.action == 'attempt':
-        result = brain.attempt(args.phrase, args.command)
-        print(f"STATUS={result['status']}")
-        print(f"COMMAND={_one_line(result['command'])}")
-
-    elif args.action == 'progress':
-        result = brain.progress()
-        print(f"LEARNED={' '.join(result['learned'])}")
-        print(f"TOTAL={result['total']}")
-        print(f"OTHERS={' '.join(result['others'])}")
-        print(f"TO_TRY={' '.join(result['to_try'])}")
-        print(f"NEXT={' '.join(result['next'])}")
-
-    elif args.action == 'setup':
-        import setup_check
-        result = setup_check.check()
-        for line in setup_check.report(result):
-            print(f"LINE={line}")
-        print(f"MODEL={result['model']}")
-        print(f"RUNNING={int(result['ollama_running'])}")
-        print(f"READY={int(result['model_ready'])}")
-        print(f"CONFIGURED={result['configured_model']}")
-
-    elif args.action == 'set-model':
-        import setup_check
-        print('saved' if setup_check.set_ollama_model(args.command) else 'error')
-
-    elif args.action == 'breakdown':
-        # With a phrase: only the first time it's used, so known phrases
-        # don't redraw the same picture every time.
-        key = normalize_phrase(args.phrase)
-        if key and brain.data.get('phrase_uses', {}).get(key, 0) > 0:
-            print("STATUS=skip")
-        else:
-            from breakdown import draw
-            result = draw(args.command, width=args.width,
-                          plain=bool(os.environ.get("CLISHE_PLAIN")))
-            print("STATUS=ok" if result else "STATUS=none")
-            if result:
-                print(f"CMD={_one_line(result['command'])}")
-                for tree, label in result['lines']:
-                    print(f"LINE={tree}\t{_one_line(label)}")
-
-    elif args.action == 'tour':
-        from tour import tour
-        for stop in tour():
-            print(f"STOP={_one_line(stop['title'])}")
-            for label, value in stop['facts']:
-                print(f"FACT={_one_line(label)}\t{_one_line(value)}")
-            import textwrap
-            for line in textwrap.wrap(stop['note'], width=max(40, args.width - 2)):
-                print(f"NOTE={line}")
-            if stop['try']:
-                print(f"TRY={_one_line('   '.join(stop['try']))}")
-
-    elif args.action == 'fix':
-        result = brain.fix(args.command, args.error)
-        print(f"STATUS={result['status']}")
-        if result['status'] == 'ok':
-            print(f"EXPLANATION={_encoded(result['explanation'])}")
-            print(f"PROVIDER={result['provider']}")
-            if result['command']:
-                print(f"COMMAND={_one_line(result['command'])}")
-            if result['unverified']:
-                print(f"UNVERIFIED={_one_line(', '.join(result['unverified']))}")
-
-    elif args.action == 'inspect':
-        # "Is this safe to run?" for a command, or for a script file.
-        import check
-        text = check.read_script(os.path.expanduser(args.command.strip())) \
-            if args.command.strip() and " " not in args.command.strip() else None
-        if text is not None:
-            result = check.check_script(text)
-            print("MODE=script")
-            print(f"LINES={len(result['results'])}")
-            for effect in result['effects']:
-                print(f"EFFECT={_one_line(effect)}")
-            for risky in result['risky'][:20]:
-                print(f"RLINE={_one_line(risky['command'])}")
-                for warning in risky['warnings']:
-                    print(f"WARN={_one_line(warning)}")
-        else:
-            result = check.inspect(args.command)
-            print("MODE=command")
-            for effect in result['effects']:
-                print(f"EFFECT={_one_line(effect)}")
-            for warning in result['warnings']:
-                print(f"WARN={_one_line(warning)}")
-            for step in result['safer']:
-                print(f"SAFER={_one_line(step)}")
-
-    elif args.action == 'undo-before':
-        import undo
-        note = undo.before(args.command, args.cwd or os.getcwd())
-        if note:
-            print(json.dumps(note))
-
-    elif args.action == 'undo-record':
-        import undo
-        try:
-            note = json.loads(args.state)
-        except ValueError:
-            note = None
-        record = undo.after(note, args.cwd or os.getcwd()) if isinstance(note, dict) else None
-        if record:
-            undo.save(UNDO_FILE, undo.load(UNDO_FILE) + [record])
-
-    elif args.action == 'undo-plan':
-        import undo
-        records = undo.load(UNDO_FILE)
-        if not records:
-            print("STATUS=none")
-        else:
-            result = undo.plan(records[-1])
-            print(f"STATUS={result['status']}")
-            print(f"ORIGINAL={_one_line(records[-1]['command'])}")
-            print(f"EXPLANATION={_one_line(result['explanation'])}")
-            for command in result.get('commands', []):
-                print(f"COMMAND={_one_line(command)}")
-
-    elif args.action == 'undo-done':
-        import undo
-        undo.save(UNDO_FILE, undo.load(UNDO_FILE)[:-1])
-
-    elif args.action == 'lessons':
-        import lessons
-        for pack in lessons.available():
-            needs = f" (needs {', '.join(pack['missing'])})" if pack['missing'] else ""
-            print(f"PACK={pack['name']}\t{pack['count']}\t{_one_line(pack['title'])}"
-                  f"\t{_one_line(pack['description'])}{needs}")
-
-    elif args.action == 'lesson':
-        import lessons
-        pack = lessons.read(args.phrase)
-        absent = lessons.missing(pack) if pack else []
-        print("STATUS=" + ("none" if not pack else "missing" if absent else "ok"))
-        for name in absent:
-            from knowledge import missing_program_hint
-            print(f"MISSING={_one_line(missing_program_hint(name))}")
-        if pack and not absent:
-            print(f"TITLE={_one_line(pack['title'])}")
-            print(f"DONE={_one_line(pack.get('done', ''))}")
-            for ex in pack['exercises']:
-                print(f"TASK={_one_line(ex['task'])}")
-                print(f"HINT={_one_line(ex['hint'])}")
-                print(f"ANSWER={_one_line(ex['answer'])}")
-
-    elif args.action == 'lesson-check':
-        import lessons
-        pack = lessons.read(args.phrase)
-        ok = bool(pack) and 0 <= args.step < len(pack['exercises']) and lessons.passes(
-            pack['exercises'][args.step]['check'], args.command, args.cwd or os.getcwd(), args.state)
-        print("yes" if ok else "no")
-
-    elif args.action == 'app':
-        # "how do I install spotify?"
-        import apps
-        from config import detect_distro_family
-        name = apps.wanted(args.phrase)
-        app = apps.find(name) if name else None
-        family = detect_distro_family()
-        result = apps.plan(app, family) if app else (apps.tool_plan(name, family) if name else None)
-        if not result:
-            print("STATUS=none")
-        elif result.get("installed"):
-            print("STATUS=installed")
-            print(f"APP={_one_line(result['app'])}")
-        else:
-            print("STATUS=ok")
-            print(f"APP={_one_line(result['app'])}")
-            print(f"HOW={_one_line(result['how'])}")
-            if result['command']:
-                print(f"COMMAND={_one_line(result['command'])}")
-            for step in result['setup']:
-                print(f"SETUP={_one_line(step)}")
-            for other in result['others']:
-                print(f"OTHER={_one_line(other)}")
-
-    elif args.action == 'doctor':
-        import doctor
-        for check in doctor.run(os.environ.get("CLISHE_BASH", ""), os.environ.get("CLISHE_ON_PATH", ""),
-                                os.environ.get("SHELL", "")):
-            print("CHECK=" + "\t".join(_one_line(part) for part in check))
-
-    elif args.action == 'sheet':
-        sheet = brain.cheat_sheet()
-        for command, meaning in sheet['learned']:
-            print(f"LEARNED={_one_line(command)}\t{_one_line(meaning)}")
-        for phrase, command in sheet['asked']:
-            print(f"ASKED={_one_line(phrase)}\t{_one_line(command)}")
-
-    elif args.action == 'setting':
-        value = load_config().get(args.phrase, "")
-        print(str(value).lower() if isinstance(value, bool) else value)
-
-    elif args.action == 'predict':
-        print(brain.predict(args.command))
-
-    elif args.action == 'resolve':
-        # Line-based KEY=value output so clishe.sh can parse it with plain
-        # bash, no JSON tool required.
-        result = brain.resolve(args.phrase)
-        print(f"STATUS={result['status']}")
-        if result['status'] == 'ok':
-            print(f"COMMAND={_one_line(result['command'])}")
-            print(f"EXPLANATION={_encoded(result['explanation'])}")
-            print(f"PROVIDER={result['provider']}")
-            if result.get('manual'):
-                print(f"MANUAL={_encoded(chr(10).join(result['manual']))}")
-            if result.get('unverified'):
-                print(f"UNVERIFIED={_one_line(', '.join(result['unverified']))}")
-        elif result['status'] == 'declined':
-            print(f"PROVIDER={result['provider']}")
-
-    elif args.action == 'explain':
-        result = brain.explain(args.command)
-        print(f"STATUS={result['status']}")
-        if result['status'] == 'ok':
-            print(f"EXPLANATION={_encoded(result['explanation'])}")
-            print(f"PROVIDER={result['provider']}")
-
-    elif args.action == 'diagnose':
-        result = brain.diagnose(args.error)
-        print(f"STATUS={result['status']}")
-        if result['status'] == 'ok':
-            print(f"HINT={_one_line(result['hint'])}")
-
-    elif args.action == 'check':
-        result = brain.check(args.command)
-        print(f"STATUS={result['status']}")
-        if result['reasons']:
-            print(f"REASON={_encoded(chr(10).join(result['reasons']))}")
+    ACTIONS[args.action](brain, args)
 
 
 if __name__ == '__main__':
