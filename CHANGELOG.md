@@ -42,6 +42,12 @@
   the example's, and every word you said must be covered.
 
 ### Changed
+- **Importing Clishe no longer writes to your home folder.** Reading a
+  Clishe function used to create `~/.config/clishe` and
+  `~/.local/share/clishe` as a side effect, just by being imported. Both
+  folders are now created the first time Clishe actually has something to
+  save, so running the test suite - or anything else that imports a
+  function - no longer leaves folders behind in your home directory.
 - The optional Anthropic provider's default model is now `claude-haiku-5-5`.
   It is still off unless you turn it on, and a model already set in your
   config is left alone.
@@ -57,6 +63,10 @@
   prints is unchanged.
 
 ### Fixed
+- `clishe doctor` no longer reports "Can't write to the data folder" on a
+  fresh install, where the folder has simply not been created yet. It says
+  so as a note instead, and still fails if the folder exists but can't be
+  written to, or couldn't be created at all.
 - Closing the terminal in the instant `practice` was starting could leave
   its throwaway folder behind. The tidy-up is now in place before the
   folder is made.

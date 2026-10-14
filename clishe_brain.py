@@ -45,12 +45,22 @@ def build_provider_chain(config):
 # cluttering the bare home directory with dotfiles.
 XDG_DATA_HOME = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 DATA_DIR = XDG_DATA_HOME / "clishe"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-try:
-    # History can contain paths, hostnames or tokens someone typed.
-    os.chmod(DATA_DIR, 0o700)
-except OSError:
-    pass
+
+
+def _ensure_data_dir():
+    """Create the data folder, owner-only, when something needs to go in it.
+
+    Deliberately not done at import: importing this module must not create
+    anything in the user's HOME. The test suite imports it (with HOME pointed
+    at a temporary folder), and so does anything that just wants to look at a
+    function.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        # History can contain paths, hostnames or tokens someone typed.
+        os.chmod(DATA_DIR, 0o700)
+    except OSError:
+        pass
 
 KB_FILE = DATA_DIR / "kb.json"
 UNDO_FILE = DATA_DIR / "undo.json"
@@ -67,6 +77,7 @@ def _migrate_legacy_file(old_name: str, new_path: Path):
     XDG-compliant paths, so upgrading doesn't silently lose existing data."""
     old_path = Path.home() / old_name
     if old_path.exists() and not new_path.exists():
+        _ensure_data_dir()
         try:
             old_path.rename(new_path)
         except OSError:
@@ -217,6 +228,7 @@ class ClisheBrain:
 
     def _save_json(self, path, payload):
         """Atomic write with owner-only permissions."""
+        _ensure_data_dir()
         tmp_path = path.with_suffix(path.suffix + '.tmp')
         try:
             fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

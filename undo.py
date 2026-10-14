@@ -257,6 +257,10 @@ def load(path: Path) -> list:
 
 def save(path: Path, records: list):
     import json
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     tmp = path.with_suffix(".tmp")
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
