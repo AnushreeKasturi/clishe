@@ -90,10 +90,24 @@ def config_file(path: Path) -> List[Check]:
 
 
 def data_folder(path: Path) -> Check:
-    if path.is_dir() and os.access(path, os.W_OK):
-        return Check("ok", "Data folder is writable", str(path))
+    # Clishe creates this folder (and any missing parents) the first time it
+    # has something to save, so a folder that isn't there yet is only a
+    # problem if we couldn't create it: what matters is whether the nearest
+    # folder above it that does exist is writable.
+    if path.is_dir():
+        if os.access(path, os.W_OK):
+            return Check("ok", "Data folder is writable", str(path))
+        return Check("fail", "Can't write to the data folder", str(path),
+                     "Clishe can't save what you teach it. Check the folder's owner and permissions.")
+    ancestor = path.parent
+    while not ancestor.is_dir() and ancestor.parent != ancestor:
+        ancestor = ancestor.parent
+    if os.access(ancestor, os.W_OK):
+        return Check("note", "Data folder not created yet", str(path),
+                     "Clishe will create it the first time it saves something.")
     return Check("fail", "Can't write to the data folder", str(path),
-                 "Clishe can't save what you teach it. Check the folder's owner and permissions.")
+                 "Clishe can't save what you teach it, and can't create the folder "
+                 "either. Check the permissions of " + str(ancestor) + ".")
 
 
 def manual_pages() -> Check:

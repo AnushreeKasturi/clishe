@@ -2,6 +2,7 @@
 JSON file or a forgotten version bump fails CI instead of a user's session."""
 import fnmatch
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -166,3 +167,81 @@ def test_default_config_is_local_only():
     import config as cfg
     assert cfg.DEFAULT_CONFIG["anthropic"]["enabled"] is False
     assert cfg.DEFAULT_CONFIG["allow_remote_ai"] is False
+
+
+def test_importing_config_writes_nothing(tmp_path):
+    """Importing config.py must not create a folder or a config file. It used
+    to mkdir on import, which meant every test run - and any `python -c
+    "import config"` - left a ~/.config/clishe behind in the real HOME."""
+    import subprocess
+    import sys as _sys
+    script = ("import sys; sys.path.insert(0, %r); import config; "
+              "print(config.CONFIG_FILE.exists())" % str(ROOT))
+    env = dict(os.environ, XDG_CONFIG_HOME=str(tmp_path))
+    result = subprocess.run([_sys.executable, "-c", script], env=env,
+                            capture_output=True, text=True, cwd=str(ROOT))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False", "importing config created a config file"
+    assert not (tmp_path / "clishe").exists(), "importing config created a folder"
+
+
+def test_loading_a_missing_config_writes_the_defaults(tmp_path):
+    """The first-run file is still created when Clishe actually runs - just
+    not when it is imported."""
+    import subprocess
+    import sys as _sys
+    script = ("import sys; sys.path.insert(0, %r); import config; "
+              "config.load_config(); print(config.CONFIG_FILE.exists())" % str(ROOT))
+    env = dict(os.environ, XDG_CONFIG_HOME=str(tmp_path))
+    result = subprocess.run([_sys.executable, "-c", script], env=env,
+                            capture_output=True, text=True, cwd=str(ROOT))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "True"
+    written = json.loads((tmp_path / "clishe" / "config.json").read_text())
+    assert written == __import__("config").DEFAULT_CONFIG
+
+
+def _run_import(module, tmp_path):
+    """Import a Clishe module in a subprocess with HOME pointed at tmp_path."""
+    import subprocess
+    import sys as _sys
+    script = f"import sys; sys.path.insert(0, {str(ROOT)!r}); import {module}"
+    env = dict(os.environ, HOME=str(tmp_path),
+               XDG_CONFIG_HOME=str(tmp_path / ".config"),
+               XDG_DATA_HOME=str(tmp_path / ".local" / "share"))
+    result = subprocess.run([_sys.executable, "-c", script], env=env,
+                            capture_output=True, text=True, cwd=str(ROOT))
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("module", ["config", "clishe_brain", "knowledge",
+                                    "safety", "undo", "check", "lessons",
+                                    "apps", "manual", "breakdown", "fix",
+                                    "tour", "doctor", "setup_check", "tldr"])
+def test_importing_clishe_writes_nothing_to_home(module, tmp_path):
+    """Importing any of Clishe's modules must leave HOME exactly as it was.
+
+    They used to mkdir on import, which meant every test run - and anything
+    else that just imported a function - littered the user's home with a
+    config folder and a data folder.
+    """
+    _run_import(module, tmp_path)
+    assert list(tmp_path.iterdir()) == [], (
+        f"importing {module} created {sorted(p.name for p in tmp_path.iterdir())}")
+
+
+def test_the_data_folder_is_created_when_something_is_saved(tmp_path):
+    """...but the first save still makes it, or nothing would ever persist."""
+    import subprocess
+    import sys as _sys
+    script = (f"import sys; sys.path.insert(0, {str(ROOT)!r}); "
+              "import clishe_brain as b; "
+              "b.ClisheBrain().save_data(); print(b.DATA_DIR.is_dir())")
+    env = dict(os.environ, HOME=str(tmp_path),
+               XDG_CONFIG_HOME=str(tmp_path / ".config"),
+               XDG_DATA_HOME=str(tmp_path / ".local" / "share"))
+    result = subprocess.run([_sys.executable, "-c", script], env=env,
+                            capture_output=True, text=True, cwd=str(ROOT))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "True"
+    assert (tmp_path / ".local" / "share" / "clishe" / "history.json").exists()

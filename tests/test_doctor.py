@@ -52,7 +52,37 @@ def test_config_file(tmp_path):
 
 def test_data_folder(tmp_path):
     assert doctor.data_folder(tmp_path).status == "ok"
-    assert doctor.data_folder(tmp_path / "missing").status == "fail"
+
+
+def test_data_folder_not_created_yet_is_fine(tmp_path):
+    """Clishe makes this folder when it first has something to save, so a
+    fresh install must not be told its data folder is broken."""
+    missing = tmp_path / "clishe"
+    check = doctor.data_folder(missing)
+    assert check.status == "note"
+    assert "create" in check.fix
+
+
+def test_data_folder_that_cannot_be_created_is_a_problem(tmp_path):
+    import os
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    os.chmod(locked, 0o500)
+    try:
+        assert doctor.data_folder(locked / "clishe").status == "fail"
+    finally:
+        os.chmod(locked, 0o700)
+
+
+def test_data_folder_that_exists_but_is_read_only(tmp_path):
+    import os
+    read_only = tmp_path / "clishe"
+    read_only.mkdir()
+    os.chmod(read_only, 0o500)
+    try:
+        assert doctor.data_folder(read_only).status == "fail"
+    finally:
+        os.chmod(read_only, 0o700)
 
 
 @pytest.fixture

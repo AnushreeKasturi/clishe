@@ -19,7 +19,9 @@ from pathlib import Path
 
 XDG_CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 CONFIG_DIR = XDG_CONFIG_HOME / "clishe"
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+# The directory is created when the config is first written, not on import:
+# importing this module must not write anything to the user's HOME (the test
+# suite imports it, and a `python -c "import config"` shouldn't litter either).
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 OS_RELEASE_FILE = Path('/etc/os-release')
@@ -145,6 +147,7 @@ def _write_default_config():
     and this call, instead of clobbering it.
     """
     try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         fd = os.open(CONFIG_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as f:
             json.dump(DEFAULT_CONFIG, f, indent=2)

@@ -114,8 +114,11 @@ Or set `CLISHE_DEBUG=1` to let those errors through in a real session:
 
 - Config lives in `$XDG_CONFIG_HOME/clishe/config.json` (default
   `~/.config/clishe/config.json`); defaults are `DEFAULT_CONFIG` in
-  `config.py`. Importing `config.py` creates that folder, which is one more
-  reason to use a throwaway `HOME`.
+  `config.py`. Neither that folder nor `~/.local/share/clishe` is created on
+  import: both are made when something is first saved, so importing a
+  Clishe module never writes to `$HOME`
+  (`tests/test_data_files.py::test_importing_clishe_writes_nothing_to_home`
+  holds that down).
 - Keys that matter: `provider_priority` (order AI providers are tried),
   `allow_remote_ai` (off: non-local hosts are refused), and per-provider
   blocks (`model`, `host`, and for cloud providers `enabled`).
