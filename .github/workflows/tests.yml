@@ -45,7 +45,8 @@ jobs:
         run: |
           zsh -n clishe-bind.zsh
           bash -n clishe.sh install.sh clishe-bind.bash
-          shellcheck -S warning clishe.sh clishe-bind.bash install.sh tests/test_shell_functions.sh
+          shellcheck -S warning clishe.sh clishe-bind.bash install.sh \
+            tests/test_shell_functions.sh tests/stop_practice.sh
 
       - name: Check Python syntax
         run: |
@@ -99,7 +100,7 @@ jobs:
           bash -n clishe.sh install.sh clishe-bind.bash
           brew install shellcheck
           shellcheck -S warning clishe.sh clishe-bind.bash install.sh \
-            tests/test_shell_functions.sh
+            tests/test_shell_functions.sh tests/stop_practice.sh
 
       - name: Run shell-level regression tests with the system bash (3.2)
         run: /bin/bash tests/test_shell_functions.sh

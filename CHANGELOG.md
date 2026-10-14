@@ -62,6 +62,12 @@
   names (which had to be updated in two places) is gone. What each action
   prints is unchanged.
 
+- A CI test that checks the practice folder is tidied up no longer depends
+  on how fast the machine is. It waited a fixed 5 seconds for the cleanup
+  before giving up, so on a loaded runner it could fail with the folder
+  still there - it failed on the Python 3.9 job while passing on 3.11, 3.12
+  and macOS. It now waits for the folder to actually go, and says on stderr
+  how long things took if it ever fails again.
 ### Fixed
 - `clishe doctor` no longer reports "Can't write to the data folder" on a
   fresh install, where the folder has simply not been created yet. It says
