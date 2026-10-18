@@ -40,6 +40,18 @@ def test_downloaded_script_gets_a_warning_and_safer_steps():
                                "less install.sh", "clishe check install.sh"]
 
 
+@pytest.mark.parametrize("command", [
+    'bash -c "$(curl -fsSL https://get.example.com/install.sh)"',
+    "sh <(curl -s https://get.example.com/install.sh)",
+    'eval "$(wget -qO- https://get.example.com/install.sh)"',
+])
+def test_download_run_without_a_pipe_gets_the_same_safer_steps(command):
+    result = check.inspect(command)
+    assert any("runs a script it downloads" in w for w in result["warnings"])
+    assert result["safer"] == ["curl -fsSL https://get.example.com/install.sh -o install.sh",
+                               "less install.sh", "clishe check install.sh"]
+
+
 def test_no_safer_steps_without_a_download():
     assert check.inspect("rm -rf build")["safer"] == []
 
