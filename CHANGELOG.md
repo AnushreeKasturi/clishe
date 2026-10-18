@@ -69,6 +69,12 @@
   and macOS. It now waits for the folder to actually go, and says on stderr
   how long things took if it ever fails again.
 ### Fixed
+- Install one-liners that run a download without a pipe now get the same
+  warning as `curl ... | sh`: `bash -c "$(curl -fsSL ...)"` (the Homebrew
+  installer), `sh <(curl ...)`, `source <(curl ...)` and
+  `eval "$(curl ...)"`, with wget too. `clishe check` shows the safer way
+  for them (download, read, check). Showing or saving a download
+  (`echo "$(curl ...)"`, `x=$(curl ...)`) is still not flagged.
 - `clishe doctor` no longer reports "Can't write to the data folder" on a
   fresh install, where the folder has simply not been created yet. It says
   so as a note instead, and still fails if the folder exists but can't be

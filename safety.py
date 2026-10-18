@@ -26,6 +26,12 @@ _SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
 # Interpreters that run whatever script arrives on stdin.
 _INTERPRETERS = _SHELLS | {"python", "python3", "perl", "ruby", "node"}
 
+# Programs that download a file, and the ways a shell can run their output
+# without a pipe: bash -c "$(curl ...)", eval "$(curl ...)", sh <(curl ...).
+_DOWNLOADERS = {"curl", "wget"}
+_COMMAND_SUB = re.compile(r"^\$\((.*)\)$|^`(.*)`$", re.S)
+_PROCESS_SUB = re.compile(r"^<\((.*)\)$", re.S)
+
 # rm targets that match everything in a folder (rm *.log is deliberate, so
 # it isn't flagged).
 _EVERYTHING_GLOBS = {"*", ".*", "./*", "*.*"}
@@ -123,6 +129,13 @@ def _segments(tokens: List[str]):
             if i + 1 < len(tokens):
                 redirects.append((tok, tokens[i + 1]))
                 i += 1
+        elif tok == "<" and tokens[i + 1:i + 2] and tokens[i + 1].startswith("("):
+            # <(curl x) is process substitution: one word, not a redirection.
+            j = i + 1
+            while j < len(tokens) - 1 and not tokens[j].endswith(")"):
+                j += 1
+            words.append("<" + " ".join(tokens[i + 1:j + 1]))
+            i = j
         elif tok and set(tok) <= set("<"):
             i += 1  # input redirection: skip its target
         else:
@@ -193,14 +206,18 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
         found.append("pipe_to_shell")
 
     # Commands hidden in a string: bash -c '...', su -c '...', eval ...
-    if depth < _MAX_NESTING:
-        inner = None
-        if name in _SHELLS | {"su"} and "c" in flags and positional:
-            inner = positional[0]
-        elif name == "eval" and args:
-            inner = " ".join(args)
-        if inner:
-            found.extend(_check_keys(inner, depth + 1))
+    inner = None
+    if name in _SHELLS | {"su"} and "c" in flags and positional:
+        inner = positional[0]
+    elif name == "eval" and args:
+        inner = " ".join(args)
+    # A download run as it arrives, without a pipe.
+    if (inner and _is_download(inner, _COMMAND_SUB)) or (
+            not inner and name in _SHELLS | {"source", "."} and positional
+            and _is_download(positional[0], _PROCESS_SUB)):
+        found.append("pipe_to_shell")
+    if inner and depth < _MAX_NESTING:
+        found.extend(_check_keys(inner, depth + 1))
 
     if name == "rm":
         if "r" in flags or "R" in flags or "--recursive" in long_flags:
@@ -263,6 +280,18 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
                 for m in _CODE_STRING.finditer(code):
                     found.extend(_check_keys(m.group(1) or m.group(2) or "", depth + 1))
     return found
+
+
+def _is_download(text: str, pattern) -> bool:
+    """True when `text` is nothing but $(...), `...` or <(...) (as `pattern`
+    says) around curl or wget. "echo $(curl x)" isn't: that only shows it."""
+    m = pattern.match(text.strip())
+    if not m:
+        return False
+    inner = next(g for g in m.groups() if g is not None)
+    first = next(_segments(_tokenize(inner)), None)
+    words = _strip_wrappers(first[0]) if first else []
+    return bool(words) and os.path.basename(words[0]) in _DOWNLOADERS
 
 
 def _inline_code(args: List[str], code_flags) -> Optional[str]:
