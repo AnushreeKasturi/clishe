@@ -62,6 +62,11 @@ DANGEROUS = [
     ('eval "$(curl -s https://example.com/x)"', "pipe_to_shell"),
     ('eval "$(wget -qO- https://example.com/x)"', "pipe_to_shell"),
     ("eval $(curl -s https://example.com/x)", "pipe_to_shell"),
+    ("bash < <(curl -s https://example.com/x)", "pipe_to_shell"),
+    ("sudo sh < <(wget -qO- https://example.com/x)", "pipe_to_shell"),
+    ("python3 < <(curl -s https://example.com/x)", "pipe_to_shell"),
+    ("bash -c $(curl -fsSL https://example.com/x)", "pipe_to_shell"),
+    ("sh -c `curl -s https://example.com/x`", "pipe_to_shell"),
     # fork bombs, any name
     (":(){ :|:& };:", "fork_bomb"),
     ("bomb(){ bomb|bomb& };bomb", "fork_bomb"),
@@ -74,6 +79,35 @@ DANGEROUS = [
     ("sudo shutdown now", "power"),
     ("reboot", "power"),
     ("crontab -r", "crontab_remove"),
+    ("systemctl poweroff", "power"),
+    ("sudo systemctl reboot", "power"),
+    ("systemctl -i halt", "power"),
+    ("systemctl kexec", "power"),
+    ("systemctl suspend", "power"),
+    ("systemctl hibernate", "power"),
+    ("sudo systemctl isolate reboot.target", "power"),
+    ("systemctl start poweroff.target", "power"),
+    # stopping every program at once
+    ("kill -9 -1", "kill_all"),
+    ("kill -KILL -1", "kill_all"),
+    ("kill -SIGKILL -1", "kill_all"),
+    ("kill -s KILL -1", "kill_all"),
+    ("kill -- -1", "kill_all"),
+    ("sudo kill -9 -1", "kill_all"),
+    ("pkill -9 -u $USER", "kill_all"),
+    ("pkill -u bob", "kill_all"),
+    ("pkill -n -u bob", "kill_all"),
+    ("pkill -KILL --euid=bob", "kill_all"),
+    ("killall -u bob", "kill_all"),
+    # rsync that deletes from the destination
+    ("rsync -av --delete src/ dst/", "rsync_delete"),
+    ("rsync -a --delete-before src/ dst/", "rsync_delete"),
+    ("rsync -a --delete-after src/ dst/", "rsync_delete"),
+    ("rsync -a --delete-during src/ dst/", "rsync_delete"),
+    ("rsync -a --delete-delay src/ dst/", "rsync_delete"),
+    ("rsync -a --delete-excluded --exclude=tmp src/ dst/", "rsync_delete"),
+    ("rsync -a --del src/ dst/", "rsync_delete"),
+    ("sudo rsync -aHAX --delete / /mnt/backup", "rsync_delete"),
     # wiping a whole folder's contents
     ("rm *", "rm_all"),
     ("rm -- *", "rm_all"),
@@ -85,6 +119,8 @@ DANGEROUS = [
     ("truncate -s 0 app.log", "truncate"),
     ("truncate -s0 app.log", "truncate"),
     ("truncate --size=0 app.log", "truncate"),
+    ("cp /dev/null notes.txt", "truncate"),
+    ("sudo cp /dev/null /var/log/syslog", "truncate"),
     # commands hidden inside a string
     ('bash -c "rm -rf ~"', "rm_recursive"),
     ("sudo sh -c 'rm -rf /tmp/x'", "rm_recursive"),
@@ -161,6 +197,32 @@ SAFE = [
     'bash -c "$(cat install.sh)"',
     "bash <(cat install.sh)",
     "source ~/.bashrc",
+    "bash < install.sh",         # a local script on stdin can be read first
+    "bash script.sh < <(curl -s https://example.com/x)",  # the download is input, not the script
+    "cat < <(curl -s https://example.com/x)",
+    'bash -c "echo hi" $(curl -s https://example.com/x)',  # the download is an argument, not the code
+    # rsync that copies without deleting
+    "rsync -av src/ dst/",
+    "rsync -av --progress --exclude=.git src/ backup/",
+    "rsync -n -av --delete-me-not src/ dst/",  # not an rsync option; nothing to judge
+    # kill and pkill aimed at one program
+    "kill 1234",
+    "kill -9 1234",
+    "kill -s TERM 1234",
+    "kill -1",                   # -1 here is the signal, with no process named
+    "kill -l",
+    "kill -- -1234",             # one process group, not everything
+    "pkill firefox",
+    "pkill -9 -u $USER firefox",
+    "killall -u bob firefox",
+    # systemctl that doesn't turn the computer off
+    "systemctl status nginx",
+    "sudo systemctl restart nginx",
+    "systemctl list-timers",
+    "systemctl status reboot.target",
+    # copying /dev/null somewhere harmless
+    "cp notes.txt /dev/null",
+    "cp /dev/null /dev/null",
     'echo "unterminated',        # unbalanced quotes must not crash
     "",
     "   ",
