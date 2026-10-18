@@ -27,10 +27,15 @@ def test_bundled_packs_can_be_solved(name, tmp_path):
     sandbox = tmp_path.resolve()
     cwd = sandbox
     for n, ex in enumerate(pack["exercises"], 1):
-        out = subprocess.run(["bash", "-c", f"cd {str(cwd)!r} && {{ {ex['answer']}\n}} >/dev/null 2>&1; "
+        # Start bash in the folder itself rather than with `cd` in the script:
+        # if that cd failed, the answer ran wherever pytest was started (the
+        # checkout) and left files there.
+        out = subprocess.run(["bash", "-c", f"{{ {ex['answer']}\n}} >/dev/null 2>&1; "
                               "kill $(jobs -p) 2>/dev/null; pwd"],
-                             capture_output=True, text=True)
-        cwd = Path(out.stdout.strip().splitlines()[-1])
+                             cwd=cwd, capture_output=True, text=True)
+        cwd = Path(out.stdout.strip().splitlines()[-1]).resolve()
+        assert cwd.is_dir() and cwd.is_relative_to(sandbox), \
+            f"{name} exercise {n}: the answer {ex['answer']!r} left the practice folder ({cwd})"
         assert lessons.passes(ex["check"], ex["answer"], str(cwd), str(sandbox)), \
             f"{name} exercise {n} ({ex['task']}): the answer {ex['answer']!r} doesn't pass its check"
 
