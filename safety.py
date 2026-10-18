@@ -32,6 +32,10 @@ _DOWNLOADERS = {"curl", "wget"}
 _COMMAND_SUB = re.compile(r"^\$\((.*)\)$|^`(.*)`$", re.S)
 _PROCESS_SUB = re.compile(r"^<\((.*)\)$", re.S)
 
+# rsync options that delete files from the destination (and --del).
+_RSYNC_DELETES = {"--delete", "--delete-before", "--delete-during", "--delete-delay",
+                  "--delete-after", "--delete-excluded", "--delete-missing-args"}
+
 # rm targets that match everything in a folder (rm *.log is deliberate, so
 # it isn't flagged).
 _EVERYTHING_GLOBS = {"*", ".*", "./*", "*.*"}
@@ -62,6 +66,23 @@ _DISK_TOOLS = {"fdisk", "sfdisk", "gdisk", "sgdisk", "parted", "wipefs",
 
 _POWER_TOOLS = {"shutdown", "reboot", "poweroff", "halt"}
 
+# systemctl poweroff, systemctl isolate reboot.target and the like.
+_SYSTEMCTL_POWER = {"poweroff", "reboot", "halt", "kexec", "soft-reboot", "suspend",
+                    "hibernate", "hybrid-sleep", "suspend-then-hibernate"}
+_POWER_TARGETS = {"poweroff.target", "reboot.target", "halt.target", "kexec.target",
+                  "soft-reboot.target", "suspend.target", "hibernate.target"}
+
+# pkill/killall options that take a value, and the ones that pick a user
+# (pkill -u bob with no program name stops everything bob runs).
+_KILL_VALUE_OPTS = {
+    "pkill": {"-u", "-U", "-g", "-G", "-P", "-s", "-t", "-F", "--euid", "--uid",
+              "--signal", "--pgroup", "--group", "--parent", "--session",
+              "--terminal", "--pidfile", "--ns", "--nslist"},
+    "killall": {"-u", "-s", "-o", "-y", "-n", "-Z", "--user", "--signal",
+                "--older-than", "--younger-than", "--ns", "--context"},
+}
+_KILL_USER_OPTS = {"-u", "-U", "--euid", "--uid", "--user"}
+
 _DISK_DEVICE = re.compile(r"^/dev/(sd[a-z]|nvme\d|hd[a-z]|vd[a-z]|mmcblk\d|xvd[a-z]|disk\d)")
 
 # name(){ name|name& };name  -- works for any function name, not just ":".
@@ -88,10 +109,12 @@ REASONS = {
     "git_reset_hard": "throws away your uncommitted changes in this git repo",
     "git_clean": "deletes untracked files from this git repo",
     "git_force_push": "overwrites history on the remote git repo",
-    "power": "shuts down or restarts the computer",
+    "power": "shuts down, restarts or puts the computer to sleep",
     "crontab_remove": "deletes all of your scheduled (cron) jobs",
     "dev_null_move": "moves files into /dev/null, which deletes them",
     "rm_all": "deletes every file in the folder",
+    "rsync_delete": "deletes files in the destination folder that aren't in the source, so a wrong path can empty it",
+    "kill_all": "stops every program you're running at once (every program on the computer, with sudo), losing unsaved work",
     "truncate": "empties the file, erasing everything that was in it",
     "mv_root": "moves a system-wide or home folder, which can break your system or make your files seem to vanish",
     "script_delete": "runs a small program that deletes files or folders",
@@ -112,7 +135,8 @@ def _tokenize(command: str) -> List[str]:
 
 def _segments(tokens: List[str]):
     """Yield (words, redirects, piped_into) for each simple command.
-    `redirects` is a list of (operator, target) for output redirections.
+    `redirects` is a list of (operator, target) for output redirections,
+    plus ("<", "<(...)") when stdin comes from a process substitution.
     `piped_into` is True when the previous separator was a pipe."""
     words, redirects = [], []
     piped = False
@@ -131,11 +155,12 @@ def _segments(tokens: List[str]):
                 i += 1
         elif tok == "<" and tokens[i + 1:i + 2] and tokens[i + 1].startswith("("):
             # <(curl x) is process substitution: one word, not a redirection.
-            j = i + 1
-            while j < len(tokens) - 1 and not tokens[j].endswith(")"):
-                j += 1
-            words.append("<" + " ".join(tokens[i + 1:j + 1]))
-            i = j
+            word, i = _process_sub(tokens, i)
+            words.append(word)
+        elif tok == "<" and tokens[i + 1:i + 2] == ["<"] and tokens[i + 2:i + 3]                 and tokens[i + 2].startswith("("):
+            # bash < <(curl x): stdin comes from a process substitution.
+            word, i = _process_sub(tokens, i + 1)
+            redirects.append(("<", word))
         elif tok and set(tok) <= set("<"):
             i += 1  # input redirection: skip its target
         else:
@@ -143,6 +168,15 @@ def _segments(tokens: List[str]):
         i += 1
     if words or redirects:
         yield words, redirects, piped
+
+
+def _process_sub(tokens: List[str], i: int):
+    """Join the tokens of <(...) starting at tokens[i] == "<" into one word.
+    Returns the word and the index of its last token."""
+    j = i + 1
+    while j < len(tokens) - 1 and not tokens[j].endswith(")"):
+        j += 1
+    return "<" + " ".join(tokens[i + 1:j + 1]), j
 
 
 def _strip_wrappers(words: List[str]) -> List[str]:
@@ -201,14 +235,15 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
     long_flags = {a.split("=")[0] for a in args if a.startswith("--")}
     positional = [a for a in args if not a.startswith("-")]
 
-    if piped and name in _INTERPRETERS and (
+    stdin_download = any(op == "<" and _is_download(t, _PROCESS_SUB) for op, t in redirects)
+    if (piped or stdin_download) and name in _INTERPRETERS and (
             not [p for p in positional if p != "-"] or (name in _SHELLS and "s" in flags)):
         found.append("pipe_to_shell")
 
     # Commands hidden in a string: bash -c '...', su -c '...', eval ...
     inner = None
     if name in _SHELLS | {"su"} and "c" in flags and positional:
-        inner = positional[0]
+        inner = _rejoin_substitution(args, args.index(positional[0]))
     elif name == "eval" and args:
         inner = " ".join(args)
     # A download run as it arrives, without a pipe.
@@ -237,6 +272,11 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
         found.append("disk_write" if _DISK_DEVICE.match(target) else "dd")
     elif name == "cp" and len(positional) >= 2 and _DISK_DEVICE.match(positional[-1]):
         found.append("disk_write")
+    elif name == "cp" and len(positional) == 2 and positional[0] == "/dev/null"             and positional[1] != "/dev/null" and not positional[1].endswith("/"):
+        found.append("truncate")
+    elif name == "rsync" and any(a == "--del" or a.split("=")[0] in _RSYNC_DELETES
+                                 for a in args):
+        found.append("rsync_delete")
     elif name == "tee" and any(_DISK_DEVICE.match(p) for p in positional):
         found.append("disk_write")
     elif name == "truncate" and _truncates_to_zero(args):
@@ -263,6 +303,14 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
             found.append("git_force_push")
     elif name in _POWER_TOOLS or (name == "init" and positional[:1] in (["0"], ["6"])):
         found.append("power")
+    elif name == "systemctl" and positional and (
+            positional[0] in _SYSTEMCTL_POWER
+            or (positional[0] in ("start", "isolate") and positional[1:2]
+                and positional[1] in _POWER_TARGETS)):
+        found.append("power")
+    elif (name == "kill" and _kills_everything(args)) or (
+            name in ("pkill", "killall") and _kills_all_of_a_user(name, args)):
+        found.append("kill_all")
     elif name == "crontab" and "r" in flags:
         found.append("crontab_remove")
     elif name == "mv" and positional:
@@ -292,6 +340,52 @@ def _is_download(text: str, pattern) -> bool:
     first = next(_segments(_tokenize(inner)), None)
     words = _strip_wrappers(first[0]) if first else []
     return bool(words) and os.path.basename(words[0]) in _DOWNLOADERS
+
+
+def _rejoin_substitution(args: List[str], start: int) -> str:
+    """An unquoted $(curl -s x) arrives as several words; join them back so
+    bash -c $(curl -s x) is read like bash -c "$(curl -s x)"."""
+    word = args[start]
+    if word.startswith("$(") and not word.endswith(")"):
+        end = ")"
+    elif word.startswith("`") and (len(word) == 1 or not word.endswith("`")):
+        end = "`"
+    else:
+        return word
+    for j in range(start + 1, len(args)):
+        if args[j].endswith(end):
+            return " ".join(args[start:j + 1])
+    return word
+
+
+def _kills_everything(args: List[str]) -> bool:
+    """kill -9 -1: -1 as the process ID means every process you can reach.
+    A leading -9, -KILL or -s KILL is the signal ("kill -1" alone isn't)."""
+    i = 0
+    if args[:1] and args[0] in ("-s", "-n", "--signal"):
+        i = 2
+    elif args[:1] and args[0].startswith("-") and args[0] != "--":
+        i = 1
+    if args[i:i + 1] == ["--"]:
+        i += 1
+    return "-1" in args[i:]
+
+
+def _kills_all_of_a_user(name: str, args: List[str]) -> bool:
+    """pkill -u bob / killall -u bob with no program name stops everything
+    that user runs (with your own name, it logs you out)."""
+    user, names, i = False, [], 0
+    while i < len(args):
+        a = args[i]
+        opt = a.split("=")[0]
+        if opt in _KILL_USER_OPTS or (a[:2] in ("-u", "-U") and len(a) > 2):
+            user = True
+        if a in _KILL_VALUE_OPTS[name]:
+            i += 1  # skip its value
+        elif not a.startswith("-"):
+            names.append(a)
+        i += 1
+    return user and not names
 
 
 def _inline_code(args: List[str], code_flags) -> Optional[str]:

@@ -59,8 +59,8 @@ def _facts(command: str) -> dict:
         if words and words[0] in ("sudo", "doas"):
             facts["sudo"] = True
         for op, target in redirects:
-            # ">&2", "2>&1" and /dev/null only move output around.
-            if target == "/dev/null" or target.isdigit() or target.startswith("&") or op.endswith("&"):
+            # ">&2", "2>&1" and /dev/null only move output around; "< <(...)" is input.
+            if op == "<" or target == "/dev/null" or target.isdigit() or target.startswith("&") or op.endswith("&"):
                 continue
             facts["changed"].append(f"{target} ({'adds to it' if op == '>>' else 'replaces it'})")
         words = _strip_wrappers(words)

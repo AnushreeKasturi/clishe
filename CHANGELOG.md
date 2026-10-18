@@ -75,6 +75,15 @@
   `eval "$(curl ...)"`, with wget too. `clishe check` shows the safer way
   for them (download, read, check). Showing or saving a download
   (`echo "$(curl ...)"`, `x=$(curl ...)`) is still not flagged.
+- More destructive commands now ask for a typed YES, with the reason:
+  `rsync --delete` (and `--delete-before`/`-after`/`-during`/`--del`),
+  which deletes files from the destination; `kill -9 -1` and
+  `pkill -u $USER`, which stop every program you're running at once;
+  `systemctl poweroff`/`reboot`/`halt`/`suspend`; `cp /dev/null file`,
+  which empties the file; and two more ways to run a download unread,
+  `bash < <(curl ...)` and an unquoted `bash -c $(curl ...)`. Copying with
+  rsync, `kill 1234`, `systemctl status` and `cp file /dev/null` are still
+  not flagged.
 - `clishe doctor` no longer reports "Can't write to the data folder" on a
   fresh install, where the folder has simply not been created yet. It says
   so as a note instead, and still fails if the folder exists but can't be
