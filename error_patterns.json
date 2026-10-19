@@ -44,6 +44,10 @@
     "hint": "Your computer isn't connected to a network right now. Check your Wi-Fi or cable."
   },
   {
+    "match": "eacces: permission denied",
+    "hint": "npm couldn't write to a folder it needs, usually a system-wide folder that belongs to admin. Don't use sudo for npm. Instead, run 'mkdir -p ~/.npm-global' then 'npm config set prefix ~/.npm-global', and add 'export PATH=~/.npm-global/bin:$PATH' to your shell profile (~/.bashrc)."
+  },
+  {
     "match": "permission denied",
     "hint": "You don't have permission to do this. If it's a file, try 'chmod' to change its permissions, or run the command with 'sudo' if it truly needs admin rights (but be careful with sudo)."
   },
@@ -106,5 +110,21 @@
   {
     "match": "read-only file system",
     "hint": "The filesystem (or this specific mount) doesn't allow writes right now. It may need to be remounted read-write, or you may not have the right permissions."
+  },
+  {
+    "match": "argument list too long",
+    "hint": "The command got too many files at once. Use a more specific name pattern so it matches fewer files, or run 'find . -name \"*.txt\"' first to see what matches."
+  },
+  {
+    "match": "segmentation fault",
+    "hint": "The program crashed because it tried to use memory it isn't allowed to touch. This is usually a bug in that program, not something you did. Try again, make sure you have the latest version ('<name> --version' shows yours), or report it to the program's maintainers."
+  },
+  {
+    "match": "non-fast-forward",
+    "hint": "Git won't push because the remote has commits you don't have yet. Run 'git pull' to bring them in, fix any conflicts, then 'git push' again."
+  },
+  {
+    "match": "refusing to merge unrelated histories",
+    "hint": "The two branches don't share any history, usually because they were started separately. If you're sure they belong together, run 'git pull --allow-unrelated-histories' once. Otherwise, check you're in the right folder."
   }
 ]

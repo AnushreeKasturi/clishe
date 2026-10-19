@@ -180,6 +180,15 @@ def test_command_not_found_names_the_program():
     ("E: Unable to locate package htopp", "apt update"),
     ("fatal: not a git repository (or any of the parent directories): .git", "git init"),
     ("curl: (6) Could not resolve host: example.invalid", "internet"),
+    ("cp: failed: No space left on device", "disk is full"),
+    ("touch: cannot touch 'a.txt': Read-only file system", "doesn't allow writes"),
+    ("Error: listen tcp :8080: bind: Address already in use", "already using"),
+    ("bash: /usr/bin/rm: Argument list too long", "too many files"),
+    ("Segmentation fault (core dumped)", "crashed"),
+    ("! [rejected] main -> main (non-fast-forward)", "git pull"),
+    ("fatal: refusing to merge unrelated histories", "--allow-unrelated-histories"),
+    # npm's text also contains "permission denied", so the npm hint must win
+    ("npm ERR! Error: EACCES: permission denied, mkdir '/usr/lib/node_modules'", "npm config set prefix"),
 ])
 def test_common_beginner_errors_are_explained(error, expected):
     assert expected in diagnose_error(error)

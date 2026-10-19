@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- **More plain-English error hints** for messages beginners get stuck on:
+  `argument list too long`, `segmentation fault`, git's `non-fast-forward`
+  and `refusing to merge unrelated histories`, and npm's `EACCES` permission
+  error (which advises against `sudo` and points to a user-owned npm folder).
+
 ### Changed
 - "Did you mean...?" is stricter: a known phrase is only offered when it
   covers more than half of what you typed, so it no longer drops the word
