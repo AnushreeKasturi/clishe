@@ -1383,6 +1383,17 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
     return 0
 fi
 
+# Git Bash, MSYS and Cygwin on Windows: the Python backend can't run there,
+# so Clishe would start and quietly do nothing. Point to WSL instead.
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "Clishe runs on Linux and macOS, not directly on Windows." >&2
+        echo "To use it on Windows, install WSL: open PowerShell and type: wsl --install" >&2
+        echo "More about WSL: https://learn.microsoft.com/windows/wsl/install" >&2
+        exit 1
+        ;;
+esac
+
 # "plain": true in the config turns plain mode on too.
 if [ -z "$PLAIN" ] && [ "$(brain --action setting --phrase plain)" = "true" ]; then
     PLAIN=1

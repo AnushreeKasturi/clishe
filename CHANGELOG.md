@@ -69,6 +69,10 @@
   and macOS. It now waits for the folder to actually go, and says on stderr
   how long things took if it ever fails again.
 ### Fixed
+- On Windows (outside WSL), `clishe` now says it needs WSL and how to
+  install it, instead of starting and then quietly doing nothing because
+  its Python backend can't run there. This covers both the pipx install
+  and running `clishe.sh` from Git Bash.
 - The safety check now sees a dangerous command wherever it sits on the
   line: in a subshell `(rm -rf x)`, a group `{ rm -rf x; }`, after `!`,
   inside `if ... then`, `for ... do` and `while ... do`, and inside
