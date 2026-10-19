@@ -15,6 +15,7 @@ import re
 import shlex
 import shutil
 import sys
+from fractions import Fraction
 from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
@@ -184,11 +185,13 @@ def meaning_tokens(phrase: str) -> frozenset:
 
 # Generic nouns say little on their own: "unzip a file" sharing only "file"
 # with "list files" is not a match.
-_WEAK_WORDS = {"file": 0.3, "folder": 0.3}
+_WEAK_WORDS = {"file": Fraction(3, 10), "folder": Fraction(3, 10)}
 
 
-def _weight(tokens) -> float:
-    return sum(_WEAK_WORDS.get(t, 1.0) for t in tokens)
+def _weight(tokens) -> Fraction:
+    """Exact, so "exactly half" is the same on every Python: summing floats
+    like 1 + 0.3 + 1 + 0.3 gives 2.5999999999999996 on Python < 3.12."""
+    return sum((_WEAK_WORDS.get(t, Fraction(1)) for t in tokens), Fraction(0))
 
 
 # A candidate must be mostly covered by what the user said (so a match never

@@ -190,6 +190,8 @@ def test_suggest_matches_on_meaning(brain, said, expected):
     "make me a sandwich",    # not "make a new folder"
     "change my password",    # not "what did i change"
     "open youtube",          # not "open a file"
+    "make a zip file of a folder",         # exactly half: not "make a new folder"
+    "delete all files in my home folder",  # exactly half: not "delete a file"
 ])
 def test_suggest_by_meaning_needs_more_than_half_of_what_was_said(brain, said):
     assert brain.suggest(said) is None
