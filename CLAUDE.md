@@ -21,7 +21,9 @@ type it yourself. Published on PyPI as `clishe` (`pipx install clishe`).
   plain-English reason (`safety.py`). Never guess a different file name for
   `rm`/`mv`. Prefer saying nothing over a wrong suggestion.
 - **Plain English for users.** Messages are written for beginners: say what
-  happened and what to do next. No jargon, no apologies.
+  happened and what to do next. No jargon, no apologies. Not "Error: ENOENT,
+  operation failed" or "Sorry, something went wrong!", but "There's no file
+  called notes.txt here. Type `ls` to see what's in this folder."
 - **Python standard library only**, plus bash. No runtime dependencies.
 
 **Never:**
@@ -37,6 +39,10 @@ pip install -e ".[dev]"                          # pytest, coverage, ruff
 HOME=$(mktemp -d) NO_COLOR=1 ./clishe.sh            # try it with a throwaway home
 python -m pytest tests/ -q && ruff check . && /bin/bash tests/test_shell_functions.sh
 ```
+
+Linux and macOS only. On Windows, work inside WSL: native Windows has no
+`grp`/`pwd` modules, POSIX permissions or `man`, so the shell tests can't run
+and some Python tests fail for reasons that have nothing to do with your change.
 
 ## Layout
 
@@ -62,6 +68,9 @@ python -m pytest tests/ -q && ruff check . && /bin/bash tests/test_shell_functio
 | `scripts/build_tldr.py` | Rebuilds `tldr.json.gz` from a pinned tldr-pages release. Never edit the .gz by hand |
 | `clishe.1` | The man page (`man clishe`) |
 | `packaging/aur/` | Arch package (not yet submitted to the AUR) |
+
+When you add, rename or remove a file here, update the README's project
+layout too: the two lists are kept by hand.
 
 The installed package keeps this flat layout: `pyproject.toml` maps the repo
 root to the `clishe` package, and lists non-Python files in `package-data`
@@ -134,7 +143,7 @@ Or set `CLISHE_DEBUG=1` to let those errors through in a real session:
 ```bash
 python -m pytest tests/ -q                 # Python (stdlib + pytest)
 ruff check .                                # lint (unused imports, undefined names)
-coverage run -m pytest tests/ -q && coverage report   # 81% now, floor is 75
+coverage run -m pytest tests/ -q && coverage report   # fails below 75% (fail_under)
 /bin/bash tests/test_shell_functions.sh    # bash, incl. end-to-end sessions
 zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
 ```
@@ -148,7 +157,8 @@ zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
   breakage, not style. Don't widen it without reformatting the codebase -
   the long lines, `typing.List` for Python 3.9 and the `sys.path` line
   before the sibling imports are all intentional.
-- **Shellcheck isn't installed locally**: watch for SC2034 (variable looks
+- **Shellcheck:** run `shellcheck -S warning clishe.sh` if you have it; if
+  not, CI will, so watch for SC2034 (variable looks
   unused; e.g. set for `eval` or another function) and SC2178/SC2128 (it
   doesn't track `local` per function, so reusing a name as array in one
   function and string in another fails). Fix by renaming or a targeted
@@ -193,16 +203,8 @@ zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
   (features, session commands table, one-shot list, project layout) and
   CONTRIBUTING when contributors are affected.
 - Commit messages: a short summary line, then what and why.
-- **Releases:**
-  1. Bump `version` in `pyproject.toml` and `CLISHE_VERSION` in `clishe.sh`.
-  2. Rename `## Unreleased` to `## X.Y.Z (date)` in the CHANGELOG.
-  3. Open a PR, and merge it when CI passes.
-  4. Run `gh release create vX.Y.Z --target main` with the changelog section as notes. `publish.yml` then uploads to PyPI (trusted publishing).
-  5. Check the upload finished (`gh run list --workflow publish.yml`) and the new version is on PyPI.
-  6. Update `packaging/aur` to the new tarball's sha256 in a follow-up PR.
-
-  The two version numbers in step 1 must match: `clishe --version` reads
-  `CLISHE_VERSION`, PyPI reads `pyproject.toml`.
-- Contributor issues use the labels `good first issue`, `data only (no code)`,
-  `help wanted` and `testing`. CONTRIBUTING's "Good places to start" table
-  maps each kind of contribution to its file and test.
+- **Releases:** follow `RELEASING.md` step by step. The version is in two
+  places (`pyproject.toml` and `CLISHE_VERSION` in `clishe.sh`) and they
+  must match.
+- Issue labels, and which file and test each kind of contribution touches,
+  are in CONTRIBUTING ("Good places to start").
