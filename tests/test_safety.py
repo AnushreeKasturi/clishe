@@ -149,6 +149,28 @@ DANGEROUS = [
     ("ruby -e 'FileUtils.rm_rf(\"x\")'", "script_delete"),
     ("node -e \"require('fs').rmSync('x', {recursive: true})\"", "script_delete"),
     ("python3 -c \"import os; os.system('rm -rf ~')\"", "rm_recursive"),
+    # subshells, groups and if/for/while don't hide the command
+    ("(rm -rf build)", "rm_recursive"),
+    ("( (rm -rf build) )", "rm_recursive"),
+    ("{ rm -rf build; }", "rm_recursive"),
+    ("! rm -rf build", "rm_recursive"),
+    ("if true; then rm -rf build; fi", "rm_recursive"),
+    ("for f in a b; do rm -rf $f; done", "rm_recursive"),
+    ("while true; do git reset --hard; break; done", "git_reset_hard"),
+    ("for f in a; do x=rm; $x -rf /; done", "rm_recursive"),
+    # $(...) and `...` run their command wherever they are
+    ("$(rm -rf build)", "rm_recursive"),
+    ("x=$(rm -rf build)", "rm_recursive"),
+    ('echo "$(rm -rf build)"', "rm_recursive"),
+    ("echo `rm -rf build`", "rm_recursive"),
+    ("cat <(rm -rf build)", "rm_recursive"),
+    # more wrappers
+    ("timeout 5s rm -rf build", "rm_recursive"),
+    ("timeout 2.5 rm -rf build", "rm_recursive"),
+    ("busybox rm -rf build", "rm_recursive"),
+    # 2>/dev/null is a redirection, not an argument
+    ("mv important.txt /dev/null 2>/dev/null", "dev_null_move"),
+    ("mv ~ /tmp/home 2>&1", "mv_root"),
 ]
 
 SAFE = [
@@ -223,6 +245,20 @@ SAFE = [
     # copying /dev/null somewhere harmless
     "cp notes.txt /dev/null",
     "cp /dev/null /dev/null",
+    # 2>/dev/null and friends don't change the verdict
+    "mv notes.txt ~ 2>/dev/null",
+    "ls 2>/dev/null",
+    "ls > /dev/null 2>&1",
+    "(ls 2>/dev/null)",
+    "x=$( echo hi > out.txt 2>&1 )",
+    'echo "2>/dev/null"',        # quoted text, not a redirection
+    # dangerous-looking text that is only printed
+    "echo '$(rm -rf /)'",
+    "echo '`rm -rf ~`'",
+    "printf '%s\\n' '(rm -rf /)'",
+    "find . \\( -name '*.py' -o -name '*.sh' \\)",
+    "(cd src && ls)",
+    "if true; then echo ok; fi",
     'echo "unterminated',        # unbalanced quotes must not crash
     "",
     "   ",

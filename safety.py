@@ -19,7 +19,14 @@ _SEPARATORS = {";", "&&", "||", "|", "&", "|&", "\n"}
 
 # Wrappers that run the *next* word as the real command.
 _WRAPPERS = {"sudo", "doas", "env", "nice", "nohup", "time", "command",
-             "exec", "builtin", "xargs", "ionice", "stdbuf", "timeout"}
+             "exec", "builtin", "xargs", "ionice", "stdbuf", "timeout", "busybox"}
+
+# Shell words that can come before a command without being the command:
+# ! rm ..., { rm ...; }, if rm ...; then rm ...; fi, for ...; do rm ...; done
+_KEYWORDS = {"!", "{", "}", "if", "then", "elif", "else", "while", "until", "do"}
+
+# A wrapper option value such as timeout's 5, 2.5 or 5s.
+_NUMBER_ARG = re.compile(r"^\d+(\.\d+)?[smhd]?$")
 
 _SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
 
@@ -124,13 +131,123 @@ REASONS = {
 def _tokenize(command: str) -> List[str]:
     """Split a command line into words and operators, respecting quotes.
     Falls back to a plain split on unbalanced quotes rather than failing."""
-    lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=";&|<>")
+    command = _protect_substitutions(_drop_fd_numbers(command.replace("\n", " ; ")))
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError:
         return re.findall(r"[;&|<>]+|[^\s;&|<>]+", command)
+
+
+def _unquoted(command: str, double_too: bool = False):
+    """Yield (index, char) for each character outside single quotes (and
+    outside double quotes too when `double_too`), with backslash escapes
+    skipped. $(...) still runs inside double quotes."""
+    quote, i = None, 0
+    while i < len(command):
+        ch = command[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote == "'":
+            if ch == "'":
+                quote = None
+        elif ch == "'" and quote is None:
+            quote = "'"
+        elif ch == '"':
+            quote = None if quote == '"' else '"'
+        elif not (double_too and quote == '"'):
+            yield i, ch
+        i += 1
+
+
+def _drop_fd_numbers(command: str) -> str:
+    """2>/dev/null names file descriptor 2; it isn't an argument. Drop the
+    number so `mv a ~ 2>/dev/null` isn't read as `mv a ~ 2`."""
+    cut = set()
+    for i, ch in _unquoted(command, double_too=True):
+        if ch.isdigit() and command[i + 1:i + 2] in (">", "<"):
+            j = i
+            while j > 0 and command[j - 1].isdigit():
+                j -= 1
+            if j == 0 or command[j - 1] in " \t;&|(":
+                cut.update(range(j, i + 1))
+    return "".join(ch for k, ch in enumerate(command) if k not in cut)
+
+
+def _protect_substitutions(command: str) -> str:
+    """Single-quote each unquoted $(...) and `...` so it stays one word:
+    in x=$( echo hi > f ), the > belongs to the inside, not to x=. The
+    inside is checked on its own (_substitutions)."""
+    spans, n = [], len(command)
+    unquoted = dict(_unquoted(command, double_too=True))
+    i = 0
+    while i < n:
+        if unquoted.get(i) == "$" and command[i + 1:i + 2] == "(":
+            depth, j = 1, i + 2
+            while j < n and depth:
+                depth += {"(": 1, ")": -1}.get(command[j], 0)
+                j += 1
+            spans.append((i, j))
+            i = j
+        elif unquoted.get(i) == "`":
+            end = command.find("`", i + 1)
+            j = n if end == -1 else end + 1
+            spans.append((i, j))
+            i = j
+        else:
+            i += 1
+    for i, j in reversed(spans):
+        inner = command[i:j].replace("'", "'\\''")
+        command = command[:i] + "'" + inner + "'" + command[j:]
+    return command
+
+
+def _substitutions(command: str) -> List[str]:
+    """The commands inside $(...), `...`, <(...) and >(...): they run too,
+    wherever they appear (except inside single quotes)."""
+    found, i, n = [], 0, len(command)
+    positions = dict(_unquoted(command))
+    while i < n:
+        if positions.get(i) in ("$", "<", ">") and command[i + 1:i + 2] == "(":
+            depth, j = 1, i + 2
+            while j < n and depth:
+                depth += {"(": 1, ")": -1}.get(command[j], 0)
+                j += 1
+            found.append(command[i + 2:j - 1] if depth == 0 else command[i + 2:])
+            i = j
+        elif positions.get(i) == "`":
+            end = command.find("`", i + 1)
+            found.append(command[i + 1:end] if end != -1 else command[i + 1:])
+            i = n if end == -1 else end + 1
+        else:
+            i += 1
+    return found
+
+
+def _strip_grouping(words: List[str]) -> List[str]:
+    """Drop ( ) { } ! and if/then/do/... around the command, so
+    (rm -rf x) and `if true; then rm -rf x; fi` are read as rm -rf x."""
+    words = list(words)
+    while words:
+        if words[0] in _KEYWORDS:
+            words.pop(0)
+        elif words[0].startswith("(") and not words[0].startswith("(("):
+            words[0] = words[0][1:]
+            if not words[0]:
+                words.pop(0)
+        else:
+            break
+    joined = " ".join(words)
+    extra = joined.count(")") - joined.count("(")
+    while extra > 0 and words and words[-1].endswith(")"):
+        words[-1] = words[-1][:-1]
+        extra -= 1
+        if not words[-1]:
+            words.pop()
+    return words
 
 
 def _segments(tokens: List[str]):
@@ -190,7 +307,7 @@ def _strip_wrappers(words: List[str]) -> List[str]:
         elif first in _WRAPPERS:
             words.pop(0)
             # Skip the wrapper's own options (sudo -u root, timeout 5, nice -n 10).
-            while words and (words[0].startswith("-") or words[0].isdigit()):
+            while words and (words[0].startswith("-") or _NUMBER_ARG.match(words[0])):
                 opt = words.pop(0)
                 if opt in ("-u", "-g", "-n", "-c", "-s") and words:
                     words.pop(0)
@@ -221,11 +338,18 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
         if _DISK_DEVICE.match(target):
             found.append("disk_write")
 
-    words = _expand_command_name(_strip_wrappers(words), variables or {})
+    words = _expand_command_name(_strip_wrappers(_strip_grouping(words)), variables or {})
+    if words and words[0].startswith(("$(", "`")):
+        # The command's name comes from running $(...) first: that part is
+        # checked on its own (_substitutions), the rest can't be known.
+        return found
     # "> notes.txt" or ": > notes.txt" with nothing else empties the file.
-    # ("echo hi > out.txt" is normal use and isn't flagged.)
+    # ("echo hi > out.txt" is normal use and isn't flagged. A ")" can stick
+    # to the target in (cmd 2>/dev/null).)
     if (not words or words == [":"]) and any(
-            op in (">", ">|", "&>") and not _DISK_DEVICE.match(t) for op, t in redirects):
+            op in (">", ">|", "&>") and not _DISK_DEVICE.match(t)
+            and t.rstrip(")") != "/dev/null"
+            for op, t in redirects):
         found.append("truncate")
     if not words:
         return found
@@ -243,7 +367,7 @@ def _check_segment(words: List[str], redirects, piped: bool, depth: int,
     # Commands hidden in a string: bash -c '...', su -c '...', eval ...
     inner = None
     if name in _SHELLS | {"su"} and "c" in flags and positional:
-        inner = _rejoin_substitution(args, args.index(positional[0]))
+        inner = positional[0]
     elif name == "eval" and args:
         inner = " ".join(args)
     # A download run as it arrives, without a pipe.
@@ -342,22 +466,6 @@ def _is_download(text: str, pattern) -> bool:
     return bool(words) and os.path.basename(words[0]) in _DOWNLOADERS
 
 
-def _rejoin_substitution(args: List[str], start: int) -> str:
-    """An unquoted $(curl -s x) arrives as several words; join them back so
-    bash -c $(curl -s x) is read like bash -c "$(curl -s x)"."""
-    word = args[start]
-    if word.startswith("$(") and not word.endswith(")"):
-        end = ")"
-    elif word.startswith("`") and (len(word) == 1 or not word.endswith("`")):
-        end = "`"
-    else:
-        return word
-    for j in range(start + 1, len(args)):
-        if args[j].endswith(end):
-            return " ".join(args[start:j + 1])
-    return word
-
-
 def _kills_everything(args: List[str]) -> bool:
     """kill -9 -1: -1 as the process ID means every process you can reach.
     A leading -9, -KILL or -s KILL is the signal ("kill -1" alone isn't)."""
@@ -425,12 +533,17 @@ def _check_keys(command: str, depth: int = 0) -> List[str]:
         keys.append("fork_bomb")
     variables = {}
     for words, redirects, piped in _segments(_tokenize(command)):
+        # "do x=rm" and "{ x=rm" set a variable just like "x=rm".
+        words = _strip_grouping(words)
         assignments = [_ASSIGNMENT.match(w) for w in words]
         if words and all(assignments) and not redirects:
             # "x=rm" on its own just sets a variable for later commands.
             variables.update((m.group(1), m.group(2)) for m in assignments)
             continue
         keys.extend(_check_segment(words, redirects, piped, depth, variables))
+    if depth < _MAX_NESTING:
+        for inner in _substitutions(command):
+            keys.extend(_check_keys(inner, depth + 1))
     return keys
 
 

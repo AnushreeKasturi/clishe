@@ -69,6 +69,15 @@
   and macOS. It now waits for the folder to actually go, and says on stderr
   how long things took if it ever fails again.
 ### Fixed
+- The safety check now sees a dangerous command wherever it sits on the
+  line: in a subshell `(rm -rf x)`, a group `{ rm -rf x; }`, after `!`,
+  inside `if ... then`, `for ... do` and `while ... do`, and inside
+  `$(...)`, `` `...` `` and `<(...)`. It also sees through `timeout 5s`
+  and `busybox`. Text that is only printed (`echo '$(rm -rf /)'`) is
+  still not flagged.
+- `2>/dev/null` no longer confuses the safety check:
+  `mv important.txt /dev/null 2>/dev/null` is now flagged, and
+  `mv notes.txt ~ 2>/dev/null` no longer is.
 - Install one-liners that run a download without a pipe now get the same
   warning as `curl ... | sh`: `bash -c "$(curl -fsSL ...)"` (the Homebrew
   installer), `sh <(curl ...)`, `source <(curl ...)` and
