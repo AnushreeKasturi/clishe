@@ -193,7 +193,9 @@ def _weight(tokens) -> float:
 
 # A candidate must be mostly covered by what the user said (so a match never
 # adds an action they didn't ask for: "my files" must not become "delete a
-# file"), and must cover at least half of what they said.
+# file"), and must cover more than half of what they said (so it can't
+# drop the word that matters: "change my password" is not "what did i
+# change", and "delete my photos" is not "delete a file").
 MEANING_CANDIDATE_COVERAGE = 0.67
 MEANING_QUERY_COVERAGE = 0.5
 
@@ -323,7 +325,7 @@ class ClisheBrain:
             overlap = _weight(wanted & have)
             cand_cov = overlap / _weight(have)
             query_cov = overlap / _weight(wanted)
-            if cand_cov < MEANING_CANDIDATE_COVERAGE or query_cov < MEANING_QUERY_COVERAGE:
+            if cand_cov < MEANING_CANDIDATE_COVERAGE or query_cov <= MEANING_QUERY_COVERAGE:
                 continue
             rank = (cand_cov + query_cov,
                     phrase in self.kb,  # the user's own phrases win ties

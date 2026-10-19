@@ -1,6 +1,7 @@
 {
   "show me disk usage": "df -h",
   "how much space do i have": "df -h",
+  "how much disk space is left": "df -h",
   "what's taking up space": "du -sh * | sort -h",
   "show folder sizes": "du -sh * | sort -h",
   "list files": "ls -la",
