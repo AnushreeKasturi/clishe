@@ -203,8 +203,8 @@ zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
   (features, session commands table, one-shot list, project layout) and
   CONTRIBUTING when contributors are affected.
 - Commit messages: a short summary line, then what and why.
-- **Releases:** follow `RELEASING.md` step by step. The version is in two
-  places (`pyproject.toml` and `CLISHE_VERSION` in `clishe.sh`) and they
-  must match.
+- **Releases:** follow `RELEASING.md` step by step. The version is in three
+  places (`pyproject.toml`, `CLISHE_VERSION` in `clishe.sh`, and `clishe.1`)
+  and they must match.
 - Issue labels, and which file and test each kind of contribution touches,
   are in CONTRIBUTING ("Good places to start").

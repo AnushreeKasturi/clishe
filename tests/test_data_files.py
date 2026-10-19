@@ -56,12 +56,14 @@ def test_command_dictionary_is_well_formed():
         assert isinstance(entry.get("flags", {}), dict), name
 
 
-def test_version_matches_between_script_and_pyproject():
-    script = (ROOT / "clishe.sh").read_text()
-    pyproject = (ROOT / "pyproject.toml").read_text()
+def test_version_matches_between_script_pyproject_and_man_page():
+    script = (ROOT / "clishe.sh").read_text(encoding="utf-8")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    man_page = (ROOT / "clishe.1").read_text(encoding="utf-8")
     script_version = re.search(r'^CLISHE_VERSION="([^"]+)"', script, re.M).group(1)
     project_version = re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1)
-    assert script_version == project_version
+    man_version = re.search(r'^\.TH CLISHE 1 "[^"]*" "clishe ([^"]+)"', man_page, re.M).group(1)
+    assert script_version == project_version == man_version
 
 
 def _shell_help_block(name):

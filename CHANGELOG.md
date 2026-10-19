@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (2026-10-19)
 
 ### Added
 - **A man page**: `man clishe` now works, with the commands, the session
