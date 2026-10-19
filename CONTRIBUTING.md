@@ -12,7 +12,7 @@ are the easiest way in.
 
 | You want to... | Edit | Checked by |
 |---|---|---|
-| Add a phrase ("show me disk usage" → `df -h`) | `seed_kb.json` | `tests/test_data_files.py` |
+| Add a phrase ("show me disk usage" → `df -h`) | `seed_kb.json` | `tests/test_data_files.py`, `tests/test_match_eval.py` |
 | Explain a command and its flags (`explain tar -xzvf`) | `command_dictionary.json` | `tests/test_data_files.py`, `tests/test_knowledge.py` |
 | Explain an error message beginners hit | `error_patterns.json` | `tests/test_knowledge.py` |
 | Explain a command's output ("what does this mean?") | `output_guides.json` | `tests/test_knowledge.py` |

@@ -190,6 +190,9 @@ zsh tests/test_zsh_bind.zsh                # the zsh Ctrl+G widget
 - **Matching:** "did you mean" and tldr matching are deliberately strict
   (same action word, every word covered, everyday installed commands only).
   When loosening anything, add the bad cases to the "no match" tests first.
+  `python tests/match_eval.py` scores matching on ~270 real phrasings (right,
+  wrong, missed); `tests/test_match_eval.py` fails if it gets worse. Add
+  phrasings to `tests/match_eval.json` when you add phrases or synonyms.
 - **Plain mode:** never print symbols directly; use `$ICON_TIP`,
   `$ICON_WARN`, `$ICON_OK`, `$ICON_NOTE`, `$ICON_FAIL`, `$ICON_BULLET`,
   `$ICON_CHEER` (set in `set_symbols`).
