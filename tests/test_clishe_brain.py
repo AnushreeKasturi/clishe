@@ -174,16 +174,27 @@ def test_suggest_returns_none_for_unrelated_phrase(brain):
 @pytest.mark.parametrize("said,expected", [
     ("remove a directory", "delete a folder"),
     ("erase a directory", "delete a folder"),
-    ("how much disk is left", "how much space do i have"),
+    ("how much disk is left", "how much disk space is left"),
     ("how much ram is available", "how much memory is free"),
     ("what programs are running", "show running processes"),
     ("display my files", "list files"),
     ("find a file", "search for a file"),
-    ("delete my photos", "delete a file"),  # still asks which file, then confirms
 ])
 def test_suggest_matches_on_meaning(brain, said, expected):
     match = brain.suggest(said)
     assert match is not None and match[0] == expected, match
+
+
+@pytest.mark.parametrize("said", [
+    "delete my photos",      # not "delete a file": half of it ("photos") would be ignored
+    "make me a sandwich",    # not "make a new folder"
+    "change my password",    # not "what did i change"
+    "open youtube",          # not "open a file"
+    "make a zip file of a folder",         # exactly half: not "make a new folder"
+    "delete all files in my home folder",  # exactly half: not "delete a file"
+])
+def test_suggest_by_meaning_needs_more_than_half_of_what_was_said(brain, said):
+    assert brain.suggest(said) is None
 
 
 @pytest.mark.parametrize("said", [
