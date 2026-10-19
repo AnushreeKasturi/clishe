@@ -1,7 +1,7 @@
 #!/bin/bash
 # Clishe - Natural Language Command Line Interface
 
-CLISHE_VERSION="0.8.0"
+CLISHE_VERSION="0.9.0"
 
 # Colors (off when output isn't a terminal, or when NO_COLOR is set -
 # see https://no-color.org).
